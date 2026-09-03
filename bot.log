@@ -1,8 +1,0 @@
-2026-09-02 23:38:39,867 - INFO - Start polling
-2026-09-02 23:38:40,152 - INFO - Run polling for bot @egor_ai_assistent_bot id=8984605429 - 'AI Assistent'
-2026-09-02 23:38:40,239 - INFO - Message from user_id=1992281885, username=VahanJaghatspanyan, type=ContentType.TEXT
-2026-09-02 23:38:40,669 - INFO - Update id=949021755 is handled. Duration 432 ms by bot id=8984605429
-2026-09-02 23:40:32,773 - INFO - Polling stopped
-2026-09-02 23:40:32,801 - ERROR - Failed to fetch updates - TelegramNetworkError: HTTP Client says - ServerDisconnectedError: Server disconnected
-2026-09-02 23:40:32,802 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8984605429)
-2026-09-02 23:40:33,082 - INFO - Polling stopped for bot @egor_ai_assistent_bot id=8984605429 - 'AI Assistent'
