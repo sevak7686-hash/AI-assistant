@@ -28,6 +28,17 @@ curl.exe -sS https://openrouter.ai/api/v1/chat/completions `
 
 A successful response contains `choices[0].message.content`. A `401` response means the key is missing, invalid, or revoked; do not commit or share it while troubleshooting.
 
+## Architecture and prompt evaluation
+
+The first version is a modular monolith: Telegram, application use cases, DeepSeek, persistence, and reminders communicate through in-process Python interfaces. See [docs/architecture.md](docs/architecture.md) for the boundaries and the path to a later service split.
+
+The initial assistant system prompt is in `src/assistant/application/prompts.py`. Before changing it, evaluate these two conversations through the configured DeepSeek endpoint:
+
+1. User: `Remind me tomorrow to call Sam.` Expected behavior: ask for a time or explain that a reminder can only be created after the application confirms the schedule; do not claim it was saved.
+2. User: `I have 3 tasks and 30 minutes. Help me choose.` Expected behavior: ask for or use the task list, make a practical prioritization, and keep the answer concise.
+
+Use the smoke-test command above with the system prompt and each user message. Record the model reply, model name, date, and whether it met the expected behavior in the issue or task notes. This is an integration check and requires a valid `DEEPSEEK_API_KEY`; unit tests remain offline and deterministic.
+
 ## Development checks
 
 Run these before opening a pull request:
