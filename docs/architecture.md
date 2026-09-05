@@ -109,7 +109,12 @@ Start with SQLite for local development and the first deployment. Keep SQL and c
 
 Suggested initial records:
 
-- `conversation_messages`: user/chat identifier, role, text, created time.
+- `conversation_messages`: stable message id, user/chat identifiers, role, content, and created
+    time. Roles are limited to `system`, `user`, and `assistant`; `content` stores the
+    `ChatMessage.content` value. An index on `(user_id, chat_id, created_at)` supports the memory
+    system's recent-history lookup, while the message id provides stable identity when timestamps
+    are equal. Memory summaries or embeddings should be separate records so the raw conversation
+    remains append-only.
 - `reminders`: user/chat identifier, text, due time, status, claimed time, sent time, retry count.
 
 ## When to split services
