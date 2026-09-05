@@ -21,6 +21,71 @@ This keeps the first version easy to run and debug, avoids distributed-systems o
 
 The database and reminder modules do not exist yet. They should be added behind application ports; Telegram must not query a database or call DeepSeek directly.
 
+## Callable API contract
+
+These are the function and protocol signatures that other application code should call. The
+application-facing API uses domain objects so transport-specific types do not leak into the
+use cases.
+
+### Implemented now
+
+```python
+class ContextBuilder:
+    def build(self, incoming: IncomingMessage) -> Sequence[ChatMessage]: ...
+
+
+class AIService(Protocol):
+    async def complete(self, messages: Sequence[ChatMessage]) -> str: ...
+
+
+class ProcessMessage:
+    async def execute(self, incoming: IncomingMessage) -> OutgoingMessage: ...
+
+
+def build_telegram_app(
+    settings: Settings,
+    process_message: ProcessMessage,
+) -> Application: ...
+```
+
+`ProcessMessage.execute` is the current equivalent of a `generate_response(user_id, text)`
+facade. A future convenience facade may be added only if it preserves chat identity and returns
+`OutgoingMessage`; callers should not call `DeepSeekAIService` directly.
+
+### Planned ports
+
+The following signatures are the intended boundaries for persistence and reminders. They are not
+implemented yet and must not be treated as available imports.
+
+```python
+class ConversationStore(Protocol):
+    async def list_recent(
+        self, *, user_id: int, chat_id: int, limit: int = 20
+    ) -> Sequence[ChatMessage]: ...
+
+    async def append(self, *, user_id: int, chat_id: int, message: ChatMessage) -> None: ...
+
+
+class ReminderScheduler(Protocol):
+    async def create(
+        self, *, user_id: int, chat_id: int, text: str, due_at: datetime
+    ) -> Reminder: ...
+
+    async def claim_due(self, *, now: datetime, limit: int = 100) -> Sequence[Reminder]: ...
+
+    async def mark_sent(self, *, reminder_id: int, sent_at: datetime) -> None: ...
+
+    async def mark_retry(self, *, reminder_id: int, failed_at: datetime) -> None: ...
+```
+
+All async methods may raise an infrastructure-specific exception. The application layer owns
+fallback behavior and logging; Telegram handlers only translate domain results into replies.
+
+### Review status
+
+This draft is ready to share with Dev2 and Dev3. Their feedback is still pending; no approval or
+comments are recorded in this repository yet.
+
 ## Request flow
 
 1. Telegram receives a text update and creates `IncomingMessage`.

@@ -24,4 +24,9 @@ class Settings(BaseSettings):
         raw = self.allowed_telegram_user_ids.strip()
         if not raw:
             return frozenset()
-        return frozenset(int(part.strip()) for part in raw.split(",") if part.strip())
+        try:
+            return frozenset(int(part.strip()) for part in raw.split(",") if part.strip())
+        except ValueError as exc:
+            raise ValueError(
+                "ALLOWED_TELEGRAM_USER_IDS must contain only comma-separated integers"
+            ) from exc

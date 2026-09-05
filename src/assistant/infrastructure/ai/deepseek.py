@@ -43,7 +43,10 @@ class DeepSeekAIService:
         except httpx.HTTPError as exc:
             raise DeepSeekError(f"DeepSeek request failed: {exc}") from exc
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise DeepSeekError("DeepSeek returned invalid JSON") from exc
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:

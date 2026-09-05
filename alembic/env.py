@@ -6,7 +6,6 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
-from assistant.config import Settings
 from assistant.infrastructure.db import models  # noqa: F401
 from assistant.infrastructure.db.base import Base
 
@@ -21,9 +20,9 @@ target_metadata = Base.metadata
 
 
 def _sync_database_url() -> str:
-    url = os.getenv("DATABASE_URL")
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
     if not url:
-        url = Settings().database_url
+        raise RuntimeError("DATABASE_URL or sqlalchemy.url must be configured for migrations")
     return url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1)
 
 

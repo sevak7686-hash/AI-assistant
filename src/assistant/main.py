@@ -17,9 +17,7 @@ def main() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     settings = Settings()
     if not settings.allowed_user_ids():
-        logging.getLogger(__name__).warning(
-            "ALLOWED_TELEGRAM_USER_IDS is empty; anyone who finds the bot can use it."
-        )
+        raise RuntimeError("ALLOWED_TELEGRAM_USER_IDS must contain at least one Telegram user ID")
 
     ai_service = DeepSeekAIService(
         api_key=settings.deepseek_api_key,

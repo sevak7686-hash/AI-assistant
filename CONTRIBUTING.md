@@ -1,5 +1,8 @@
 # Contributing
 
+See [docs/coding-standards.md](docs/coding-standards.md) for naming, docstrings, commit
+messages, and review expectations.
+
 ## Branches
 
 - `main` is the stable branch. Do not push directly to it.

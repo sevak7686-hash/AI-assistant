@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from telegram import Update
+from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from assistant.application.process_message import ProcessMessage
@@ -10,6 +11,14 @@ from assistant.config import Settings
 from assistant.domain.messages import IncomingMessage
 
 logger = logging.getLogger(__name__)
+_MAX_TELEGRAM_MESSAGE_LENGTH = 4096
+
+
+def _split_message(text: str) -> list[str]:
+    return [
+        text[index : index + _MAX_TELEGRAM_MESSAGE_LENGTH]
+        for index in range(0, len(text), _MAX_TELEGRAM_MESSAGE_LENGTH)
+    ]
 
 
 def build_telegram_app(settings: Settings, process_message: ProcessMessage) -> Application:
@@ -33,12 +42,15 @@ class TelegramHandlers:
 
     def _is_allowed(self, user_id: int) -> bool:
         if not self._allowed_user_ids:
-            return True
+            return False
         return user_id in self._allowed_user_ids
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         del context
-        if update.effective_user is None or update.message is None:
+        if update.effective_user is None or update.effective_chat is None or update.message is None:
+            return
+        if update.effective_chat.type != ChatType.PRIVATE:
+            logger.warning("Rejected /start from non-private chat_id=%s", update.effective_chat.id)
             return
         if not self._is_allowed(update.effective_user.id):
             logger.warning("Rejected /start from user_id=%s", update.effective_user.id)
@@ -48,6 +60,9 @@ class TelegramHandlers:
     async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         del context
         if update.effective_user is None or update.effective_chat is None or update.message is None:
+            return
+        if update.effective_chat.type != ChatType.PRIVATE:
+            logger.warning("Rejected message from non-private chat_id=%s", update.effective_chat.id)
             return
         user_id = update.effective_user.id
         if not self._is_allowed(user_id):
@@ -62,4 +77,5 @@ class TelegramHandlers:
             text=text,
         )
         outgoing = await self._process_message.execute(incoming)
-        await update.message.reply_text(outgoing.text)
+        for chunk in _split_message(outgoing.text):
+            await update.message.reply_text(chunk)
