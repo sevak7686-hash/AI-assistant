@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
-    database_url: str
+    database_url: str = "postgresql+asyncpg://assistant:changeme@localhost:5432/assistant"
     allowed_telegram_user_ids: str = Field(default="")
 
     def allowed_user_ids(self) -> frozenset[int]:
