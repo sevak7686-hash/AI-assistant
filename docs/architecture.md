@@ -19,7 +19,8 @@ This keeps the first version easy to run and debug, avoids distributed-systems o
 | `infrastructure.db` | Database schema and reads/writes | `ConversationStore` implementation |
 | `infrastructure.reminders` | Due-time storage and delivery scheduling | `ReminderScheduler` implementation |
 
-The database and reminder modules do not exist yet. They should be added behind application ports; Telegram must not query a database or call DeepSeek directly.
+The database adapter is implemented behind the `ConversationStore` port; the reminder module is
+still planned. Telegram must not query a database or call DeepSeek directly.
 
 ### Database session lifecycle
 
@@ -69,10 +70,10 @@ def build_telegram_app(
 facade. A future convenience facade may be added only if it preserves chat identity and returns
 `OutgoingMessage`; callers should not call `DeepSeekAIService` directly.
 
-### Planned ports
+### Ports
 
-The following signatures are the intended boundaries for persistence and reminders. They are not
-implemented yet and must not be treated as available imports.
+The following signatures are the boundaries for persistence and reminders. `ConversationStore` is
+implemented by `SqlAlchemyConversationStore`; `ReminderScheduler` remains planned.
 
 ```python
 class ConversationStore(Protocol):

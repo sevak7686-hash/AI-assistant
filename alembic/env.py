@@ -23,7 +23,9 @@ def _sync_database_url() -> str:
     url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
     if not url:
         raise RuntimeError("DATABASE_URL or sqlalchemy.url must be configured for migrations")
-    return url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1)
+    return url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1).replace(
+        "sqlite+aiosqlite", "sqlite", 1
+    )
 
 
 def run_migrations_offline() -> None:

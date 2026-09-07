@@ -53,8 +53,24 @@ To format changed Python files, run `ruff format .`.
 
 ## Run the bot
 
+Start PostgreSQL in Docker and apply the database migrations before the first run and after schema
+updates:
+
+```powershell
+docker compose up -d db
+py -m alembic upgrade head
+```
+
+The default `.env` values connect the bot to this project's Docker database at `localhost:5433`.
+Then start
+polling:
+
 ```powershell
 py -m assistant.main
 ```
+
+Stop the database with `docker compose stop db`. Data remains in the named Docker volume. Use
+`docker compose down -v` only when you intentionally want to delete the database volume and all
+stored conversations.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch and pull-request workflow.

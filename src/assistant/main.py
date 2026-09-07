@@ -6,6 +6,8 @@ from assistant.application.context_builder import ContextBuilder
 from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService
+from assistant.infrastructure.db.conversation_store import SqlAlchemyConversationStore
+from assistant.infrastructure.db.session import create_session_factory
 from assistant.interfaces.telegram.bot import build_telegram_app
 
 
@@ -25,9 +27,11 @@ def main() -> None:
         model=settings.deepseek_model,
         max_tokens=settings.deepseek_max_tokens,
     )
+    conversation_store = SqlAlchemyConversationStore(create_session_factory(settings.database_url))
     process_message = ProcessMessage(
         ai_service=ai_service,
         context_builder=ContextBuilder(),
+        conversation_store=conversation_store,
     )
     application = build_telegram_app(settings, process_message)
     application.run_polling()
