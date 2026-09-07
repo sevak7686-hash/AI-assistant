@@ -21,6 +21,23 @@ This keeps the first version easy to run and debug, avoids distributed-systems o
 
 The database and reminder modules do not exist yet. They should be added behind application ports; Telegram must not query a database or call DeepSeek directly.
 
+### Database session lifecycle
+
+Create one session factory during application startup and inject it into database-backed
+adapters. Each application operation or incoming request should use `session_scope(factory)` from
+`infrastructure.db.session`:
+
+```python
+async with session_scope(session_factory) as session:
+    await store.append(session=session, user_id=user_id, chat_id=chat_id, message=message)
+```
+
+`session_scope` commits when the block succeeds, rolls back when it raises, and closes the session
+in both cases. Repositories and application services must not create engines or sessions directly,
+and sessions must not be retained after the block exits. The factory and engine are process-scoped;
+the session and transaction are operation-scoped. Startup/shutdown code owns eventual engine
+disposal when the bot lifecycle is wired to persistence.
+
 ## Callable API contract
 
 These are the function and protocol signatures that other application code should call. The
@@ -115,6 +132,11 @@ Suggested initial records:
     system's recent-history lookup, while the message id provides stable identity when timestamps
     are equal. Memory summaries or embeddings should be separate records so the raw conversation
     remains append-only.
+- `messages`: normalized conversation records with the same user/chat, role, content, and time
+    fields, linked to `users`. This is the persistence surface for new conversation-store code;
+    `conversation_messages` remains for compatibility with the initial schema.
+- `memory_entries`: user-owned durable memory content with a type, optional source message, and
+    created/updated times. The user/created index supports retrieval by recency.
 - `reminders`: user/chat identifier, text, due time, status, claimed time, sent time, retry count.
 
 ## When to split services
