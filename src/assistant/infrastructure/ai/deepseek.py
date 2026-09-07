@@ -16,11 +16,13 @@ class DeepSeekAIService:
         api_key: str,
         base_url: str,
         model: str,
+        max_tokens: int | None = None,
         timeout_seconds: float = 60.0,
     ) -> None:
         self._api_key = api_key
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._model = model
+        self._max_tokens = max_tokens
         self._timeout_seconds = timeout_seconds
 
     async def complete(self, messages: Sequence[ChatMessage]) -> str:
@@ -28,6 +30,8 @@ class DeepSeekAIService:
             "model": self._model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
         }
+        if self._max_tokens is not None:
+            payload["max_tokens"] = self._max_tokens
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
