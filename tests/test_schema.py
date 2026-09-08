@@ -27,6 +27,15 @@ def _load_memory_messages_migration():
     return migration
 
 
+def _load_reminders_migration():
+    path = Path(__file__).parents[1] / "alembic" / "versions" / "0004_reminders.py"
+    spec = importlib.util.spec_from_file_location("reminders_migration", path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    return migration
+
+
 def test_conversation_message_schema_supports_recent_memory_lookup() -> None:
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
@@ -106,3 +115,39 @@ def test_memory_entries_messages_migration_can_create_and_rollback() -> None:
         memory_messages_migration.downgrade()
 
     assert not {"messages", "memory_entries"}.intersection(inspect(connection).get_table_names())
+
+
+def test_reminders_migration_can_create_and_rollback() -> None:
+    engine = create_engine("sqlite://")
+    connection = engine.connect()
+    users_migration = _load_users_migration()
+    memory_messages_migration = _load_memory_messages_migration()
+    reminders_migration = _load_reminders_migration()
+    context = MigrationContext.configure(connection)
+
+    with Operations.context(context):
+        users_migration.upgrade()
+        memory_messages_migration.upgrade()
+        reminders_migration.upgrade()
+
+    inspector = inspect(connection)
+    assert "reminders" in inspector.get_table_names()
+    assert {column["name"] for column in inspector.get_columns("reminders")} == {
+        "id",
+        "user_id",
+        "chat_id",
+        "text",
+        "due_at",
+        "status",
+        "claimed_at",
+        "sent_at",
+        "retry_count",
+    }
+    assert "ix_reminders_status_due" in {
+        index["name"] for index in inspector.get_indexes("reminders")
+    }
+
+    with Operations.context(context):
+        reminders_migration.downgrade()
+
+    assert "reminders" not in inspect(connection).get_table_names()

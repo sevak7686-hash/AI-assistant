@@ -18,6 +18,64 @@ Copy-Item .env.example .env
 
 Fill `.env` with the Telegram bot token and DeepSeek API key. Never commit `.env` or paste the key into source code, issues, or chat. The expected variables are documented in `.env.example`.
 
+## Local Postgres and database layer
+
+The supported local setup runs PostgreSQL 16 in Docker. Install Docker Desktop, then from the
+repository root create the environment file and start the database:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d db
+docker compose ps db
+```
+
+The container uses these development defaults:
+
+| Setting | Value |
+| --- | --- |
+| Database | `assistant` |
+| User | `assistant` |
+| Password | `assistant_dev_password` |
+| Host port | `5433` |
+
+The database URL used by the application is
+`postgresql+asyncpg://assistant:assistant_dev_password@localhost:5433/assistant`. Change the
+`POSTGRES_*` values and `DATABASE_URL` together in `.env` if you need different credentials. The
+database container must be recreated after changing `POSTGRES_*` values on an already-initialized
+volume.
+
+Apply all migrations after starting PostgreSQL:
+
+```powershell
+py -m alembic upgrade head
+```
+
+The current migration chain creates `conversation_messages`, `users`, `messages`,
+`memory_entries`, and `reminders`. Check the current migration and roll back one migration with:
+
+```powershell
+py -m alembic current
+py -m alembic downgrade -1
+```
+
+To remove the local database and all stored data deliberately:
+
+```powershell
+docker compose down -v
+```
+
+The database code lives under `src/assistant/infrastructure/db`. `create_session_factory` creates
+an async SQLAlchemy session factory, and `session_scope` provides one transaction per application
+operation: successful operations commit, while exceptions roll back and are re-raised. The
+conversation store creates a missing `User` record before appending a `Message`.
+
+Database schema and session tests use isolated SQLite databases or fakes, so they do not require
+Docker. Run them with:
+
+```powershell
+\.venv\Scripts\python.exe -m pytest -q tests/test_schema.py tests/test_session.py tests/test_conversation_store.py
+```
+
 ## Run and test the AI service standalone
 
 The AI adapter is offline-testable and does not require Telegram, Docker, PostgreSQL, or a live API
