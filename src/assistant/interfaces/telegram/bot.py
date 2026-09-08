@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 
 from telegram import Update
 from telegram.constants import ChatType
@@ -21,8 +22,15 @@ def _split_message(text: str) -> list[str]:
     ]
 
 
-def build_telegram_app(settings: Settings, process_message: ProcessMessage) -> Application:
-    application = Application.builder().token(settings.telegram_bot_token).build()
+def build_telegram_app(
+    settings: Settings,
+    process_message: ProcessMessage,
+    post_shutdown: Callable[[Application], Awaitable[None]] | None = None,
+) -> Application:
+    builder = Application.builder().token(settings.telegram_bot_token)
+    if post_shutdown is not None:
+        builder = builder.post_shutdown(post_shutdown)
+    application = builder.build()
     allowed = settings.allowed_user_ids()
     handlers = TelegramHandlers(process_message=process_message, allowed_user_ids=allowed)
     application.add_handler(CommandHandler("start", handlers.start))

@@ -33,7 +33,11 @@ def main() -> None:
         context_builder=ContextBuilder(),
         conversation_store=conversation_store,
     )
-    application = build_telegram_app(settings, process_message)
+
+    async def close_ai_service(_application) -> None:
+        await ai_service.aclose()
+
+    application = build_telegram_app(settings, process_message, close_ai_service)
     application.run_polling()
 
 

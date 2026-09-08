@@ -18,12 +18,18 @@ class DeepSeekAIService:
         model: str,
         max_tokens: int | None = None,
         timeout_seconds: float = 60.0,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         self._api_key = api_key
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._model = model
         self._max_tokens = max_tokens
-        self._timeout_seconds = timeout_seconds
+        self._client = client or httpx.AsyncClient(timeout=timeout_seconds)
+        self._owns_client = client is None
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
 
     async def complete(self, messages: Sequence[ChatMessage]) -> str:
         payload = {
@@ -37,9 +43,8 @@ class DeepSeekAIService:
             "Content-Type": "application/json",
         }
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.post(self._url, json=payload, headers=headers)
-                response.raise_for_status()
+            response = await self._client.post(self._url, json=payload, headers=headers)
+            response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise DeepSeekError(
                 f"DeepSeek HTTP {exc.response.status_code}: {exc.response.text[:300]}"

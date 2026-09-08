@@ -1,6 +1,9 @@
 # Personal AI Assistant
 
-A Telegram-based personal assistant powered through OpenRouter. The project is organized as a Python package under `src/assistant`, with Telegram integration in `interfaces/telegram`, application orchestration in `application`, and external AI providers in `infrastructure/ai`.
+A Telegram-based personal assistant using a DeepSeek-compatible chat-completions API. OpenRouter can
+be used by setting `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL`. The project is organized as a Python
+package under `src/assistant`, with Telegram integration in `interfaces/telegram`, application
+orchestration in `application`, and external AI providers in `infrastructure/ai`.
 
 ## Local setup
 
@@ -14,6 +17,50 @@ Copy-Item .env.example .env
 ```
 
 Fill `.env` with the Telegram bot token and DeepSeek API key. Never commit `.env` or paste the key into source code, issues, or chat. The expected variables are documented in `.env.example`.
+
+## Run and test the AI service standalone
+
+The AI adapter is offline-testable and does not require Telegram, Docker, PostgreSQL, or a live API
+key. From an activated virtual environment, install the project and development dependencies, then
+run the focused tests:
+
+```powershell
+py -m pip install -e ".[dev]"
+py -m pytest -q tests/test_deepseek.py
+```
+
+`DeepSeekAIService` accepts an injected `httpx.AsyncClient` for callers that need custom transport
+or lifecycle control. Without one, it owns a reusable client; call `await service.aclose()` when the
+embedding application shuts down. The adapter converts HTTP, transport, invalid-JSON, malformed
+response, and empty-reply failures into `DeepSeekError`.
+
+To make one live standalone completion without starting Telegram, run this PowerShell snippet after
+setting `DEEPSEEK_API_KEY`:
+
+```powershell
+@'
+import asyncio
+import os
+
+from assistant.domain.messages import ChatMessage
+from assistant.infrastructure.ai.deepseek import DeepSeekAIService
+
+
+async def main():
+	service = DeepSeekAIService(
+		api_key=os.environ["DEEPSEEK_API_KEY"],
+		base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+		model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+	)
+	try:
+		print(await service.complete([ChatMessage(role="user", content="Reply with OK")]))
+	finally:
+		await service.aclose()
+
+
+asyncio.run(main())
+'@ | py
+```
 
 ## OpenRouter smoke test
 
@@ -48,6 +95,10 @@ ruff check .
 ruff format --check .
 pytest
 ```
+
+The full suite includes database-backed tests and requires the declared dependencies installed. It
+does not require a running PostgreSQL server because the tests use isolated database fixtures. The
+Telegram bot itself additionally requires Docker PostgreSQL and the migrations shown below.
 
 To format changed Python files, run `ruff format .`.
 

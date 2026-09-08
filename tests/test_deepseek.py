@@ -1,5 +1,8 @@
+import httpx
+import pytest
+
 from assistant.domain.messages import ChatMessage
-from assistant.infrastructure.ai.deepseek import DeepSeekAIService
+from assistant.infrastructure.ai.deepseek import DeepSeekAIService, DeepSeekError
 
 
 async def test_complete_sends_multi_turn_history_and_output_limit(monkeypatch) -> None:
@@ -57,3 +60,53 @@ async def test_complete_sends_multi_turn_history_and_output_limit(monkeypatch) -
         "Authorization": "Bearer key",
         "Content-Type": "application/json",
     }
+
+
+async def test_complete_reuses_owned_client_and_closes_it(monkeypatch) -> None:
+    calls = 0
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            nonlocal calls
+            calls += 1
+            return FakeResponse()
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    client = FakeClient()
+    monkeypatch.setattr("httpx.AsyncClient", lambda timeout: client)
+    service = DeepSeekAIService(api_key="key", base_url="https://example.test", model="model")
+
+    assert await service.complete([]) == "ok"
+    assert await service.complete([]) == "ok"
+    await service.aclose()
+
+    assert calls == 2
+    assert client.closed is True
+
+
+async def test_http_status_error_is_wrapped(monkeypatch) -> None:
+    request = httpx.Request("POST", "https://example.test/chat/completions")
+    response = httpx.Response(503, request=request, text="upstream unavailable")
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            raise httpx.HTTPStatusError("server error", request=request, response=response)
+
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            return FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda timeout: FakeClient())
+    service = DeepSeekAIService(api_key="key", base_url="https://example.test", model="model")
+
+    with pytest.raises(DeepSeekError, match="HTTP 503: upstream unavailable"):
+        await service.complete([])

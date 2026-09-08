@@ -1,6 +1,7 @@
-# Module Architecture
+# Module Architecture v1
 
-Status: accepted for the first production version.
+Status: v1 implementation contract. The interfaces below are the build target for next week's
+work; team acknowledgement still needs to be recorded outside this repository.
 
 ## Decision
 
@@ -25,19 +26,21 @@ still planned. Telegram must not query a database or call DeepSeek directly.
 ### Database session lifecycle
 
 Create one session factory during application startup and inject it into database-backed
-adapters. Each application operation or incoming request should use `session_scope(factory)` from
-`infrastructure.db.session`:
+adapters. The current `SqlAlchemyConversationStore` owns one `session_scope(factory)` per
+repository operation:
 
 ```python
 async with session_scope(session_factory) as session:
-    await store.append(session=session, user_id=user_id, chat_id=chat_id, message=message)
+    # execute repository work here
+    await session.flush()
 ```
 
 `session_scope` commits when the block succeeds, rolls back when it raises, and closes the session
 in both cases. Repositories and application services must not create engines or sessions directly,
 and sessions must not be retained after the block exits. The factory and engine are process-scoped;
 the session and transaction are operation-scoped. Startup/shutdown code owns eventual engine
-disposal when the bot lifecycle is wired to persistence.
+disposal when the bot lifecycle is wired to persistence. Atomic persistence of the user and assistant
+messages is a follow-up change; v1 currently appends them as two repository operations.
 
 ## Callable API contract
 
@@ -49,7 +52,11 @@ use cases.
 
 ```python
 class ContextBuilder:
-    def build(self, incoming: IncomingMessage) -> Sequence[ChatMessage]: ...
+    def build(
+        self,
+        incoming: IncomingMessage,
+        history: Sequence[ChatMessage] = (),
+    ) -> Sequence[ChatMessage]: ...
 
 
 class AIService(Protocol):
@@ -63,6 +70,7 @@ class ProcessMessage:
 def build_telegram_app(
     settings: Settings,
     process_message: ProcessMessage,
+    post_shutdown: Callable[[Application], Awaitable[None]] | None = None,
 ) -> Application: ...
 ```
 
@@ -99,21 +107,31 @@ class ReminderScheduler(Protocol):
 All async methods may raise an infrastructure-specific exception. The application layer owns
 fallback behavior and logging; Telegram handlers only translate domain results into replies.
 
-### Review status
+### Next-week ownership and handoff
 
-This draft is ready to share with Dev2 and Dev3. Their feedback is still pending; no approval or
-comments are recorded in this repository yet.
+Dev2 builds application behavior against `ProcessMessage`, `ContextBuilder`, `AIService`, and
+`ConversationStore`. Dev3 builds infrastructure against `AIService`, `ConversationStore`, the
+database models/migrations, and the Telegram application shutdown hook. Both developers use the
+domain values in `domain.messages`; provider and Telegram types must not cross into application
+ports.
+
+The v1 contract is frozen for next week's implementation: method names, keyword arguments, return
+types, message roles, and error behavior above are the compatibility boundary. Any proposed change
+should update this document and the focused tests in the same pull request. Human confirmation from
+Dev2 and Dev3 is still an action for the team meeting; this repository cannot infer that approval.
 
 ## Request flow
 
 1. Telegram receives a text update and creates `IncomingMessage`.
 2. `ProcessMessage` loads recent conversation history from `ConversationStore` and asks `ContextBuilder` to create the system, history, and current-user messages.
 3. `AIService` sends that context to DeepSeek and returns assistant text.
-4. `ProcessMessage` stores the user message and assistant reply through `ConversationStore`.
+4. `ProcessMessage` stores the user message and assistant reply through `ConversationStore` when
+    persistence is configured.
 5. The application asks `ReminderScheduler` to create or update a reminder when the assistant has identified a reminder command. Reminder creation should be explicit and confirmed, not inferred from every casual mention of a date.
 6. Telegram sends the resulting `OutgoingMessage` back to the chat.
 
-The first implementation currently covers steps 1, 2, 3, and 6. Persistence and reminders are planned ports, not hidden global state.
+The first implementation covers steps 1 through 4 and 6. Reminder scheduling remains a planned
+port, not hidden global state.
 
 ## Reminder delivery flow
 
