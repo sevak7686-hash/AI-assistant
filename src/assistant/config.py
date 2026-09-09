@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_max_tokens: int = 512
+    openai_api_key: str = ""
+    openai_base_url: str = "https://openrouter.ai/api/v1"
+    openai_transcription_model: str = "openai/gpt-4o-mini-transcribe"
+    transcription_language: str = "ru"
     database_url: str = (
         "postgresql+asyncpg://assistant:assistant_dev_password@localhost:5433/assistant"
     )

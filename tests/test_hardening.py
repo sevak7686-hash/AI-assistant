@@ -10,7 +10,11 @@ from assistant.interfaces.telegram.bot import TelegramHandlers, _split_message
 
 
 class FakeProcessMessage:
+    def __init__(self) -> None:
+        self.received = []
+
     async def execute(self, incoming):
+        self.received.append(incoming)
         return OutgoingMessage(chat_id=incoming.chat_id, text="x" * 5000)
 
 
@@ -72,6 +76,67 @@ async def test_long_replies_are_split_for_telegram() -> None:
     await handlers.on_text(update, None)
 
     assert [len(reply) for reply in message.replies] == [4096, 904]
+
+
+async def test_photo_is_forwarded_as_multimodal_content() -> None:
+    process = FakeProcessMessage()
+    handlers = TelegramHandlers(process_message=process, allowed_user_ids=frozenset({42}))
+    update, message = make_update()
+    message.text = None
+    message.caption = "Что на фото?"
+    message.photo = [SimpleNamespace(file_id="photo-id")]
+    message.voice = None
+    message.audio = None
+
+    class FakeTelegramFile:
+        async def download_as_bytearray(self):
+            return bytearray(b"image")
+
+    class FakeBot:
+        async def get_file(self, file_id):
+            assert file_id == "photo-id"
+            return FakeTelegramFile()
+
+    await handlers.on_media(update, SimpleNamespace(bot=FakeBot()))
+
+    assert process.received[0].text == "Что на фото?"
+    assert process.received[0].content[0] == {"type": "text", "text": "Что на фото?"}
+    assert process.received[0].content[1]["image_url"]["url"].endswith("aW1hZ2U=")
+
+
+async def test_voice_is_transcribed_before_processing() -> None:
+    process = FakeProcessMessage()
+
+    class FakeTranscription:
+        async def transcribe(self, audio, *, filename, content_type):
+            assert audio == b"voice"
+            assert filename == "voice.ogg"
+            assert content_type == "audio/ogg"
+            return "  Привет, помощник  "
+
+    handlers = TelegramHandlers(
+        process_message=process,
+        allowed_user_ids=frozenset({42}),
+        transcription_service=FakeTranscription(),
+    )
+    update, message = make_update()
+    message.text = None
+    message.photo = []
+    message.voice = SimpleNamespace(file_id="voice-id")
+    message.audio = None
+
+    class FakeTelegramFile:
+        async def download_as_bytearray(self):
+            return bytearray(b"voice")
+
+    class FakeBot:
+        async def get_file(self, file_id):
+            assert file_id == "voice-id"
+            return FakeTelegramFile()
+
+    await handlers.on_media(update, SimpleNamespace(bot=FakeBot()))
+
+    assert process.received[0].text == "Привет, помощник"
 
 
 def test_split_message_preserves_short_text() -> None:

@@ -6,6 +6,7 @@ from assistant.application.context_builder import ContextBuilder
 from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService
+from assistant.infrastructure.ai.transcription import OpenAITranscriptionService
 from assistant.infrastructure.db.conversation_store import SqlAlchemyConversationStore
 from assistant.infrastructure.db.session import create_session_factory
 from assistant.interfaces.telegram.bot import build_telegram_app
@@ -27,6 +28,16 @@ def main() -> None:
         model=settings.deepseek_model,
         max_tokens=settings.deepseek_max_tokens,
     )
+    transcription_service = (
+        OpenAITranscriptionService(
+            api_key=settings.openai_api_key or settings.deepseek_api_key,
+            base_url=settings.openai_base_url,
+            model=settings.openai_transcription_model,
+            language=settings.transcription_language,
+        )
+        if settings.openai_api_key or settings.deepseek_api_key
+        else None
+    )
     conversation_store = SqlAlchemyConversationStore(create_session_factory(settings.database_url))
     process_message = ProcessMessage(
         ai_service=ai_service,
@@ -36,8 +47,12 @@ def main() -> None:
 
     async def close_ai_service(_application) -> None:
         await ai_service.aclose()
+        if transcription_service is not None:
+            await transcription_service.aclose()
 
-    application = build_telegram_app(settings, process_message, close_ai_service)
+    application = build_telegram_app(
+        settings, process_message, close_ai_service, transcription_service
+    )
     application.run_polling()
 
 

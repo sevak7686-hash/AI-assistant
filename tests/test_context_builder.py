@@ -24,3 +24,16 @@ def test_default_prompt_sets_capability_and_truthfulness_boundaries() -> None:
     assert messages[0].content == SYSTEM_PROMPT
     assert "do not claim that a reminder was created" in SYSTEM_PROMPT
     assert "Do not invent facts" in SYSTEM_PROMPT
+
+
+def test_build_preserves_multimodal_user_content() -> None:
+    content = [
+        {"type": "text", "text": "What is this?"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,aW1hZ2U="}},
+    ]
+
+    messages = ContextBuilder().build(
+        IncomingMessage(user_id=1, chat_id=1, text="[Image]", content=content)
+    )
+
+    assert messages[-1].content == content

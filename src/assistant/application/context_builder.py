@@ -16,5 +16,5 @@ class ContextBuilder:
         return (
             ChatMessage(role="system", content=self._system_prompt),
             *history,
-            ChatMessage(role="user", content=incoming.text),
+            ChatMessage(role="user", content=incoming.content or incoming.text),
         )

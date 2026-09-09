@@ -18,6 +18,14 @@ Copy-Item .env.example .env
 
 Fill `.env` with the Telegram bot token and DeepSeek API key. Never commit `.env` or paste the key into source code, issues, or chat. The expected variables are documented in `.env.example`.
 
+The bot accepts Telegram photos and sends them to the configured chat model as image content. Use
+a vision-capable model, such as the Gemini model shown in `.env.example`, for image understanding.
+Voice and audio messages use the OpenRouter transcription endpoint with the same key as
+`DEEPSEEK_API_KEY` by default. The default model is `openai/gpt-4o-mini-transcribe` and the
+language hint is Russian. Set `OPENAI_API_KEY` only when transcription should use a separate key;
+`OPENAI_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, and `TRANSCRIPTION_LANGUAGE` can override the
+defaults for another OpenAI-compatible provider.
+
 ## Local Postgres and database layer
 
 The supported local setup runs PostgreSQL 16 in Docker. Install Docker Desktop, then from the
