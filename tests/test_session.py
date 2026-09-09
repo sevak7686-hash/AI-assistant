@@ -1,6 +1,35 @@
+from urllib.parse import parse_qsl, urlsplit
+
 import pytest
 
-from assistant.infrastructure.db.session import session_scope
+from assistant.infrastructure.db.session import _async_database_url, session_scope
+
+
+def test_plain_postgresql_urls_use_asyncpg() -> None:
+    assert (
+        _async_database_url("postgresql://user:pass@localhost/db?sslmode=require")
+        == "postgresql+asyncpg://user:pass@localhost/db?ssl=require"
+    )
+    assert (
+        _async_database_url("postgres://user:pass@localhost/db")
+        == "postgresql+asyncpg://user:pass@localhost/db"
+    )
+
+
+def test_async_database_urls_are_unchanged() -> None:
+    url = "postgresql+asyncpg://user:pass@localhost/db"
+
+    assert _async_database_url(url) == url
+
+
+def test_async_database_url_preserves_other_query_parameters() -> None:
+    url = "postgresql+asyncpg://user:pass@localhost/db?sslmode=require&channel_binding=require"
+    normalized = _async_database_url(url)
+
+    assert urlsplit(normalized).scheme == "postgresql+asyncpg"
+    assert dict(parse_qsl(urlsplit(normalized).query)) == {
+        "ssl": "require",
+    }
 
 
 class FakeSession:

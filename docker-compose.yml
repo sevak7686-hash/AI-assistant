@@ -1,5 +1,6 @@
 services:
   db:
+    profiles: [local]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -15,6 +16,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: >-
+      sh -c "python -m alembic upgrade head && python -m assistant.main"
 
 volumes:
   assistant_postgres_data:

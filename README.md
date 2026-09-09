@@ -33,7 +33,7 @@ repository root create the environment file and start the database:
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d db
+docker compose --profile local up -d db
 docker compose ps db
 ```
 
@@ -174,11 +174,12 @@ Start PostgreSQL in Docker and apply the database migrations before the first ru
 updates:
 
 ```powershell
-docker compose up -d db
+docker compose --profile local up -d db
 py -m alembic upgrade head
 ```
 
-The default `.env` values connect the bot to this project's Docker database at `localhost:5433`.
+For local Docker Postgres, set `DATABASE_URL` to the Docker database URL shown above. The default
+Compose deployment uses the `DATABASE_URL` from `.env` directly, which is suitable for Neon.
 Then start
 polling:
 
@@ -191,3 +192,36 @@ Stop the database with `docker compose stop db`. Data remains in the named Docke
 stored conversations.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch and pull-request workflow.
+
+## Deploy on a small VPS
+
+The Compose stack can run the bot on a small Hetzner, DigitalOcean, or Oracle Cloud VPS while
+using Neon for PostgreSQL. Install Docker Engine and the Compose plugin on the server, then clone
+the repository and create `.env` from `.env.example`:
+
+```sh
+cp .env.example .env
+```
+
+Set the Telegram, AI, allowed-user, and Neon `DATABASE_URL` values in `.env`. The default Compose
+path passes that Neon URL directly to the bot. The local Postgres service is available only with
+the explicit `local` profile.
+
+Start the stack from the repository root:
+
+```sh
+docker compose up -d --build
+docker compose ps
+docker compose logs -f bot
+```
+
+The bot applies pending Alembic migrations and then starts polling. It uses `restart:
+unless-stopped`. Neon stores the database data independently of the VPS.
+
+To deploy an update:
+
+```sh
+git pull
+docker compose up -d --build
+docker compose logs --tail=100 bot
+```

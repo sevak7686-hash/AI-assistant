@@ -1,6 +1,7 @@
 import os
 from logging.config import fileConfig
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from alembic import context
 from dotenv import load_dotenv
@@ -23,9 +24,16 @@ def _sync_database_url() -> str:
     url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
     if not url:
         raise RuntimeError("DATABASE_URL or sqlalchemy.url must be configured for migrations")
-    return url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1).replace(
+    sync_url = url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1).replace(
         "sqlite+aiosqlite", "sqlite", 1
     )
+    if "postgresql+psycopg2" in sync_url:
+        parts = urlsplit(sync_url)
+        query = dict(parse_qsl(parts.query))
+        if "ssl" in query:
+            query["sslmode"] = query.pop("ssl")
+        sync_url = urlunsplit(parts._replace(query=urlencode(query)))
+    return sync_url
 
 
 def run_migrations_offline() -> None:
