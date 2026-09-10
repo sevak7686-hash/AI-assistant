@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +7,7 @@ from telegram.constants import ChatType
 from assistant.config import Settings
 from assistant.domain.messages import OutgoingMessage
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService, DeepSeekError
+from assistant.infrastructure.db.models import Reminder
 from assistant.interfaces.telegram.bot import TelegramHandlers, _split_message
 
 
@@ -25,6 +27,38 @@ class ReplyMessage:
 
     async def reply_text(self, text: str) -> None:
         self.replies.append(text)
+
+
+class FakeReminderStore:
+    def __init__(self) -> None:
+        self.reminders = [
+            Reminder(
+                id=7,
+                user_id=42,
+                chat_id=99,
+                text="take medicine",
+                due_at=datetime(2026, 9, 10, 22, 0),
+                status="pending",
+            )
+        ]
+
+    async def list_pending(self, *, user_id: int):
+        return [reminder for reminder in self.reminders if reminder.user_id == user_id]
+
+    async def delete_pending(self, *, user_id: int, reminder_id: int) -> bool:
+        for reminder in self.reminders:
+            if reminder.user_id == user_id and reminder.id == reminder_id:
+                self.reminders.remove(reminder)
+                return True
+        return False
+
+    async def update_pending(self, *, user_id: int, reminder_id: int, text: str, due_at):
+        for reminder in self.reminders:
+            if reminder.user_id == user_id and reminder.id == reminder_id:
+                reminder.text = text
+                reminder.due_at = due_at
+                return reminder
+        return None
 
 
 def make_update(*, chat_type: str = ChatType.PRIVATE, text: str = "hello"):
@@ -65,6 +99,50 @@ async def test_group_messages_are_rejected() -> None:
     await handlers.on_text(update, None)
 
     assert message.replies == []
+
+
+async def test_reminders_menu_lists_pending_reminders() -> None:
+    handlers = TelegramHandlers(
+        process_message=FakeProcessMessage(),
+        allowed_user_ids=frozenset({42}),
+        reminder_store=FakeReminderStore(),
+    )
+    update, message = make_update()
+
+    await handlers.reminders(update, None)
+
+    assert "7. 2026-09-10 22:00 - take medicine" in message.replies[0]
+
+
+async def test_remove_reminder_is_scoped_to_user() -> None:
+    store = FakeReminderStore()
+    handlers = TelegramHandlers(
+        process_message=FakeProcessMessage(),
+        allowed_user_ids=frozenset({42}),
+        reminder_store=store,
+    )
+    update, message = make_update()
+
+    await handlers.remove_reminder(update, SimpleNamespace(args=["8"]))
+    assert message.replies == ["Pending reminder not found."]
+    assert len(store.reminders) == 1
+
+
+async def test_edit_reminder_updates_text_and_time() -> None:
+    store = FakeReminderStore()
+    handlers = TelegramHandlers(
+        process_message=FakeProcessMessage(),
+        allowed_user_ids=frozenset({42}),
+        reminder_store=store,
+    )
+    update, message = make_update()
+
+    await handlers.edit_reminder(update, SimpleNamespace(args=["7", "23:15", "new text"]))
+
+    assert store.reminders[0].text == "new text"
+    assert store.reminders[0].due_at.hour == 23
+    assert store.reminders[0].due_at.minute == 15
+    assert message.replies[0].startswith("Reminder updated for ")
 
 
 async def test_long_replies_are_split_for_telegram() -> None:

@@ -8,6 +8,7 @@ from assistant.config import Settings
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService
 from assistant.infrastructure.ai.transcription import OpenAITranscriptionService
 from assistant.infrastructure.db.conversation_store import SqlAlchemyConversationStore
+from assistant.infrastructure.db.reminder_store import SqlAlchemyReminderStore
 from assistant.infrastructure.db.session import create_session_factory
 from assistant.interfaces.telegram.bot import build_telegram_app
 
@@ -38,7 +39,9 @@ def main() -> None:
         if settings.openai_api_key or settings.deepseek_api_key
         else None
     )
-    conversation_store = SqlAlchemyConversationStore(create_session_factory(settings.database_url))
+    session_factory = create_session_factory(settings.database_url)
+    conversation_store = SqlAlchemyConversationStore(session_factory)
+    reminder_store = SqlAlchemyReminderStore(session_factory)
     process_message = ProcessMessage(
         ai_service=ai_service,
         context_builder=ContextBuilder(),
@@ -51,7 +54,7 @@ def main() -> None:
             await transcription_service.aclose()
 
     application = build_telegram_app(
-        settings, process_message, close_ai_service, transcription_service
+        settings, process_message, close_ai_service, transcription_service, reminder_store
     )
     application.run_polling()
 

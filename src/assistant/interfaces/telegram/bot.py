@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 
 from telegram import Update
 from telegram.constants import ChatType
@@ -12,6 +13,7 @@ from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
 from assistant.domain.messages import ContentPart, IncomingMessage, MessageContent
 from assistant.infrastructure.ai.service import TranscriptionService
+from assistant.infrastructure.db.reminder_store import SqlAlchemyReminderStore
 
 logger = logging.getLogger(__name__)
 _MAX_TELEGRAM_MESSAGE_LENGTH = 4096
@@ -29,6 +31,7 @@ def build_telegram_app(
     process_message: ProcessMessage,
     post_shutdown: Callable[[Application], Awaitable[None]] | None = None,
     transcription_service: TranscriptionService | None = None,
+    reminder_store: SqlAlchemyReminderStore | None = None,
 ) -> Application:
     builder = Application.builder().token(settings.telegram_bot_token)
     if post_shutdown is not None:
@@ -39,12 +42,21 @@ def build_telegram_app(
         process_message=process_message,
         allowed_user_ids=allowed,
         transcription_service=transcription_service,
+        reminder_store=reminder_store,
     )
     application.add_handler(CommandHandler("start", handlers.start))
+    application.add_handler(CommandHandler("remind", handlers.remind))
+    application.add_handler(CommandHandler("reminders", handlers.reminders))
+    application.add_handler(CommandHandler("remove_reminder", handlers.remove_reminder))
+    application.add_handler(CommandHandler("edit_reminder", handlers.edit_reminder))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.on_text))
     application.add_handler(
         MessageHandler(filters.PHOTO | filters.VOICE | filters.AUDIO, handlers.on_media)
     )
+    if reminder_store is not None:
+        if application.job_queue is None:
+            raise RuntimeError("Reminder support requires python-telegram-bot[job-queue]")
+        application.job_queue.run_repeating(handlers.deliver_due_reminders, interval=60, first=1)
     return application
 
 
@@ -55,10 +67,12 @@ class TelegramHandlers:
         process_message: ProcessMessage,
         allowed_user_ids: frozenset[int],
         transcription_service: TranscriptionService | None = None,
+        reminder_store: SqlAlchemyReminderStore | None = None,
     ) -> None:
         self._process_message = process_message
         self._allowed_user_ids = allowed_user_ids
         self._transcription_service = transcription_service
+        self._reminder_store = reminder_store
 
     def _is_allowed(self, user_id: int) -> bool:
         if not self._allowed_user_ids:
@@ -76,6 +90,120 @@ class TelegramHandlers:
             logger.warning("Rejected /start from user_id=%s", update.effective_user.id)
             return
         await update.message.reply_text("Assistant is online. Send a message.")
+
+    async def remind(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_valid_message(update) or self._reminder_store is None:
+            return
+        if len(context.args) < 2:
+            await self._reply_error(update, "Use: /remind 22:00 text of the reminder")
+            return
+        try:
+            reminder_time = datetime.strptime(context.args[0], "%H:%M").time()
+        except ValueError:
+            await self._reply_error(update, "Time must use 24-hour format, for example 22:00.")
+            return
+        now = datetime.now().astimezone()
+        due_at = now.replace(
+            hour=reminder_time.hour,
+            minute=reminder_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        if due_at <= now:
+            due_at += timedelta(days=1)
+        assert update.effective_user is not None
+        assert update.effective_chat is not None
+        reminder = await self._reminder_store.create(
+            user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            text=" ".join(context.args[1:]),
+            due_at=due_at,
+        )
+        assert update.message is not None
+        await update.message.reply_text(f"Reminder set for {reminder.due_at:%Y-%m-%d %H:%M}.")
+
+    async def reminders(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        del context
+        if not self._is_valid_message(update) or self._reminder_store is None:
+            return
+        assert update.effective_user is not None
+        reminders = await self._reminder_store.list_pending(user_id=update.effective_user.id)
+        if not reminders:
+            await self._reply_error(update, "You have no pending reminders.")
+            return
+        lines = ["Pending reminders:"]
+        lines.extend(
+            f"{reminder.id}. {reminder.due_at:%Y-%m-%d %H:%M} - {reminder.text}"
+            for reminder in reminders
+        )
+        lines.append("Use /edit_reminder ID HH:MM new text or /remove_reminder ID.")
+        assert update.message is not None
+        await update.message.reply_text("\n".join(lines))
+
+    async def remove_reminder(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_valid_message(update) or self._reminder_store is None:
+            return
+        if len(context.args) != 1 or not context.args[0].isdigit():
+            await self._reply_error(update, "Use: /remove_reminder ID")
+            return
+        assert update.effective_user is not None
+        deleted = await self._reminder_store.delete_pending(
+            user_id=update.effective_user.id,
+            reminder_id=int(context.args[0]),
+        )
+        await self._reply_error(
+            update,
+            "Reminder removed." if deleted else "Pending reminder not found.",
+        )
+
+    async def edit_reminder(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_valid_message(update) or self._reminder_store is None:
+            return
+        if len(context.args) < 3 or not context.args[0].isdigit():
+            await self._reply_error(update, "Use: /edit_reminder ID HH:MM new text")
+            return
+        try:
+            reminder_time = datetime.strptime(context.args[1], "%H:%M").time()
+        except ValueError:
+            await self._reply_error(update, "Time must use 24-hour format, for example 22:00.")
+            return
+        now = datetime.now().astimezone()
+        due_at = now.replace(
+            hour=reminder_time.hour,
+            minute=reminder_time.minute,
+            second=0,
+            microsecond=0,
+        )
+        if due_at <= now:
+            due_at += timedelta(days=1)
+        assert update.effective_user is not None
+        reminder = await self._reminder_store.update_pending(
+            user_id=update.effective_user.id,
+            reminder_id=int(context.args[0]),
+            text=" ".join(context.args[2:]),
+            due_at=due_at,
+        )
+        await self._reply_error(
+            update,
+            f"Reminder updated for {reminder.due_at:%Y-%m-%d %H:%M}."
+            if reminder is not None
+            else "Pending reminder not found.",
+        )
+
+    async def deliver_due_reminders(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if self._reminder_store is None:
+            return
+        for reminder in await self._reminder_store.claim_due():
+            try:
+                await context.bot.send_message(
+                    chat_id=reminder.chat_id,
+                    text=f"Reminder: {reminder.text}",
+                )
+            except Exception:
+                logger.exception("Failed to send reminder_id=%s", reminder.id)
+                await self._reminder_store.release(reminder.id)
+            else:
+                await self._reminder_store.mark_sent(reminder.id)
 
     async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         del context

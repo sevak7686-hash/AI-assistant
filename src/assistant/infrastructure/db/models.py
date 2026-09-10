@@ -2,8 +2,19 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import text as sql_text
 
 from assistant.infrastructure.db.base import Base
 
@@ -79,4 +90,25 @@ class MemoryEntry(Base):
     )
 
 
-__all__ = ["Base", "ConversationMessage", "MemoryEntry", "Message", "User"]
+class Reminder(Base):
+    __tablename__ = "reminders"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'claimed', 'sent')", name="ck_reminders_status"),
+        CheckConstraint("retry_count >= 0", name="ck_reminders_retry_count_nonnegative"),
+        Index("ix_reminders_status_due", "status", "due_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=sql_text("'pending'")
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sql_text("0"))
+
+
+__all__ = ["Base", "ConversationMessage", "MemoryEntry", "Message", "Reminder", "User"]

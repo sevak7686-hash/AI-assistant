@@ -26,6 +26,12 @@ language hint is Russian. Set `OPENAI_API_KEY` only when transcription should us
 `OPENAI_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, and `TRANSCRIPTION_LANGUAGE` can override the
 defaults for another OpenAI-compatible provider.
 
+Create a one-time reminder with the 24-hour `/remind HH:MM text` command, for example
+`/remind 22:00 take the medicine`. The bot stores it in PostgreSQL and checks for due reminders
+every minute. Times use the bot server's local timezone; a time that has already passed is scheduled
+for the next day. Use `/reminders` to view pending reminders, `/edit_reminder ID HH:MM new text` to
+change one, and `/remove_reminder ID` to delete one.
+
 ## Local Postgres and database layer
 
 The supported local setup runs PostgreSQL 16 in Docker. Install Docker Desktop, then from the
