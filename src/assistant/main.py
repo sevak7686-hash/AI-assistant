@@ -10,6 +10,7 @@ from assistant.infrastructure.ai.transcription import OpenAITranscriptionService
 from assistant.infrastructure.db.conversation_store import SqlAlchemyConversationStore
 from assistant.infrastructure.db.reminder_store import SqlAlchemyReminderStore
 from assistant.infrastructure.db.session import create_session_factory
+from assistant.infrastructure.search.serpapi import SerpAPIWebSearch
 from assistant.interfaces.telegram.bot import build_telegram_app
 
 
@@ -29,6 +30,15 @@ def main() -> None:
         model=settings.deepseek_model,
         max_tokens=settings.deepseek_max_tokens,
     )
+    search_service = (
+        SerpAPIWebSearch(
+            api_key=settings.serpapi_api_key,
+            max_results=settings.search_max_results,
+            timeout_seconds=settings.search_timeout_seconds,
+        )
+        if settings.serpapi_api_key
+        else None
+    )
     transcription_service = (
         OpenAITranscriptionService(
             api_key=settings.openai_api_key or settings.deepseek_api_key,
@@ -46,10 +56,16 @@ def main() -> None:
         ai_service=ai_service,
         context_builder=ContextBuilder(),
         conversation_store=conversation_store,
+        search_service=search_service,
+        reminder_store=reminder_store,
+        reminder_timezone=settings.reminder_timezone_info(),
+        max_tool_rounds=settings.max_tool_rounds,
     )
 
     async def close_ai_service(_application) -> None:
         await ai_service.aclose()
+        if search_service is not None:
+            await search_service.aclose()
         if transcription_service is not None:
             await transcription_service.aclose()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
@@ -9,6 +10,7 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.request import HTTPXRequest
 
 from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
@@ -18,6 +20,8 @@ from assistant.infrastructure.db.reminder_store import SqlAlchemyReminderStore
 
 logger = logging.getLogger(__name__)
 _MAX_TELEGRAM_MESSAGE_LENGTH = 4096
+_MEDIA_DOWNLOAD_ATTEMPTS = 3
+_MEDIA_DOWNLOAD_RETRY_SECONDS = 1
 
 
 def _split_message(text: str) -> list[str]:
@@ -35,7 +39,13 @@ def build_telegram_app(
     reminder_store: SqlAlchemyReminderStore | None = None,
     reminder_timezone: ZoneInfo | None = None,
 ) -> Application:
-    builder = Application.builder().token(settings.telegram_bot_token)
+    telegram_request = HTTPXRequest(
+        connect_timeout=30,
+        read_timeout=60,
+        write_timeout=60,
+        pool_timeout=30,
+    )
+    builder = Application.builder().token(settings.telegram_bot_token).request(telegram_request)
     if post_shutdown is not None:
         builder = builder.post_shutdown(post_shutdown)
     application = builder.build()
@@ -48,10 +58,6 @@ def build_telegram_app(
         reminder_timezone=reminder_timezone,
     )
     application.add_handler(CommandHandler("start", handlers.start))
-    application.add_handler(CommandHandler("remind", handlers.remind))
-    application.add_handler(CommandHandler("reminders", handlers.reminders))
-    application.add_handler(CommandHandler("remove_reminder", handlers.remove_reminder))
-    application.add_handler(CommandHandler("edit_reminder", handlers.edit_reminder))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.on_text))
     application.add_handler(
         MessageHandler(filters.PHOTO | filters.VOICE | filters.AUDIO, handlers.on_media)
@@ -212,8 +218,14 @@ class TelegramHandlers:
             return
         if message.photo:
             photo = message.photo[-1]
-            telegram_file = await context.bot.get_file(photo.file_id)
-            data = bytes(await telegram_file.download_as_bytearray())
+            try:
+                data = await _download_media(context, photo.file_id)
+            except Exception:
+                logger.exception("Photo download failed for user_id=%s", update.effective_user.id)
+                await self._reply_error(
+                    update, "I could not download that image. Please try again."
+                )
+                return
             caption = (message.caption or "").strip()
             content: list[ContentPart] = [
                 {"type": "text", "text": caption or "Describe this image."},
@@ -230,8 +242,14 @@ class TelegramHandlers:
             media = message.voice or message.audio
             if media is None:
                 return
-            telegram_file = await context.bot.get_file(media.file_id)
-            data = bytes(await telegram_file.download_as_bytearray())
+            try:
+                data = await _download_media(context, media.file_id)
+            except Exception:
+                logger.exception("Audio download failed for user_id=%s", update.effective_user.id)
+                await self._reply_error(
+                    update, "I could not download that audio. Please try again."
+                )
+                return
             filename = getattr(media, "file_name", None) or "voice.ogg"
             content_type = getattr(media, "mime_type", None) or "audio/ogg"
             try:
@@ -288,6 +306,20 @@ class TelegramHandlers:
 
 def _base64(data: bytes) -> str:
     return b64encode(data).decode("ascii")
+
+
+async def _download_media(context: ContextTypes.DEFAULT_TYPE, file_id: str) -> bytes:
+    last_error: Exception | None = None
+    for attempt in range(_MEDIA_DOWNLOAD_ATTEMPTS):
+        try:
+            telegram_file = await context.bot.get_file(file_id)
+            return bytes(await telegram_file.download_as_bytearray())
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 < _MEDIA_DOWNLOAD_ATTEMPTS:
+                await asyncio.sleep(_MEDIA_DOWNLOAD_RETRY_SECONDS)
+    assert last_error is not None
+    raise last_error
 
 
 def _next_due_at(

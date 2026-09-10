@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-Role = Literal["system", "user", "assistant"]
+Role = Literal["system", "user", "assistant", "tool"]
 ContentPart: TypeAlias = dict[str, object]
 MessageContent: TypeAlias = str | list[ContentPart]
 
@@ -24,3 +24,12 @@ class OutgoingMessage:
 class ChatMessage:
     role: Role
     content: MessageContent
+    tool_calls: tuple["ToolCall", ...] = ()
+    tool_call_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: str

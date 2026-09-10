@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -23,10 +25,7 @@ class SqlAlchemyConversationStore(ConversationStore):
             )
             messages = result.scalars().all()
 
-        return [
-            ChatMessage(role=message.role, content=message.content)
-            for message in reversed(messages)
-        ]
+        return [_to_chat_message(message) for message in reversed(messages)]
 
     async def append(self, *, user_id: int, chat_id: int, message: ChatMessage) -> None:
         async with session_scope(self._session_factory) as session:
@@ -39,5 +38,29 @@ class SqlAlchemyConversationStore(ConversationStore):
                     chat_id=chat_id,
                     role=message.role,
                     content=message.content,
+                    tool_call_id=message.tool_call_id,
+                    tool_calls=json.dumps(
+                        [
+                            {"id": call.id, "name": call.name, "arguments": call.arguments}
+                            for call in message.tool_calls
+                        ]
+                    )
+                    if message.tool_calls
+                    else None,
                 )
             )
+
+
+def _to_chat_message(message: Message) -> ChatMessage:
+    from assistant.domain.messages import ToolCall
+
+    raw_tool_calls = json.loads(message.tool_calls) if message.tool_calls else []
+    return ChatMessage(
+        role=message.role,
+        content=message.content,
+        tool_call_id=message.tool_call_id,
+        tool_calls=tuple(
+            ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"])
+            for item in raw_tool_calls
+        ),
+    )

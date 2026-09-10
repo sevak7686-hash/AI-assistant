@@ -13,8 +13,11 @@ class ContextBuilder:
     def build(
         self, incoming: IncomingMessage, history: Sequence[ChatMessage] = ()
     ) -> Sequence[ChatMessage]:
+        safe_history = tuple(
+            message for message in history if message.role != "tool" and not message.tool_calls
+        )
         return (
             ChatMessage(role="system", content=self._system_prompt),
-            *history,
+            *safe_history,
             ChatMessage(role="user", content=incoming.content or incoming.text),
         )

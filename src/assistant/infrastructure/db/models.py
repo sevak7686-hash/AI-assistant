@@ -23,7 +23,7 @@ class ConversationMessage(Base):
     __tablename__ = "conversation_messages"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('system', 'user', 'assistant')",
+            "role IN ('system', 'user', 'assistant', 'tool')",
             name="ck_conversation_messages_role",
         ),
         Index(
@@ -39,6 +39,8 @@ class ConversationMessage(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_call_id: Mapped[str | None] = mapped_column(String(128))
+    tool_calls: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
@@ -59,7 +61,7 @@ class User(Base):
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
-        CheckConstraint("role IN ('system', 'user', 'assistant')", name="ck_messages_role"),
+        CheckConstraint("role IN ('system', 'user', 'assistant', 'tool')", name="ck_messages_role"),
         Index("ix_messages_conversation_created", "user_id", "chat_id", "created_at"),
     )
 
@@ -68,6 +70,8 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_call_id: Mapped[str | None] = mapped_column(String(128))
+    tool_calls: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )

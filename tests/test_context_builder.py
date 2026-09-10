@@ -1,6 +1,6 @@
 from assistant.application.context_builder import ContextBuilder
 from assistant.application.prompts import SYSTEM_PROMPT
-from assistant.domain.messages import IncomingMessage
+from assistant.domain.messages import ChatMessage, IncomingMessage, ToolCall
 
 
 def test_build_includes_system_and_user_messages() -> None:
@@ -37,3 +37,22 @@ def test_build_preserves_multimodal_user_content() -> None:
     )
 
     assert messages[-1].content == content
+
+
+def test_build_excludes_persisted_tool_transcript_from_new_turn() -> None:
+    builder = ContextBuilder(system_prompt="system")
+    history = [
+        ChatMessage(role="user", content="Search this"),
+        ChatMessage(
+            role="assistant",
+            content="",
+            tool_calls=(ToolCall(id="call-1", name="web_search", arguments='{"query":"x"}'),),
+        ),
+        ChatMessage(role="tool", content="results", tool_call_id="call-1"),
+        ChatMessage(role="assistant", content="Final answer"),
+    ]
+
+    messages = builder.build(IncomingMessage(user_id=1, chat_id=1, text="Next"), history)
+
+    assert [message.role for message in messages] == ["system", "user", "assistant", "user"]
+    assert messages[-2].content == "Final answer"

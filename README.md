@@ -26,12 +26,19 @@ language hint is Russian. Set `OPENAI_API_KEY` only when transcription should us
 `OPENAI_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, and `TRANSCRIPTION_LANGUAGE` can override the
 defaults for another OpenAI-compatible provider.
 
-Create a one-time reminder with the 24-hour `/remind HH:MM text` command, for example
-`/remind 22:00 take the medicine`. The bot stores it in PostgreSQL and checks for due reminders
-every minute. Times use `REMINDER_TIMEZONE` (default `Europe/Moscow`), not the Docker server's
-timezone. A time that has already passed is scheduled for the next day. Use `/reminders` to view
-pending reminders, `/edit_reminder ID HH:MM new text` to
-change one, and `/remove_reminder ID` to delete one.
+The assistant can search the internet automatically when the model needs current or externally
+verifiable information. Configure `SERPAPI_API_KEY` to enable this capability. `SEARCH_MAX_RESULTS`
+limits returned results (1-10), `SEARCH_TIMEOUT_SECONDS` controls the SerpAPI request timeout, and
+`MAX_TOOL_ROUNDS` limits repeated model search calls. Search results are treated as untrusted
+external reference material, and the final response should include useful source URLs. No search
+command is required. Without a SerpAPI key, normal assistant responses continue to work but web
+search is unavailable.
+
+Create a one-time reminder with a normal text or voice message, for example
+`Remind me tomorrow at 22:00 to take the medicine`. The model asks for the missing time or text
+when necessary and creates the reminder only after both are clear. The bot stores reminders in
+PostgreSQL and checks for due reminders every minute. Times use `REMINDER_TIMEZONE` (default
+`Europe/Moscow`), not the Docker server's timezone. Reminder commands are not required.
 
 ## Local Postgres and database layer
 

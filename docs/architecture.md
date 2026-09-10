@@ -16,7 +16,8 @@ This keeps the first version easy to run and debug, avoids distributed-systems o
 | `interfaces.telegram` | Telegram updates, access checks, replies | `ProcessMessage.execute(IncomingMessage)` |
 | `application` | Use-case orchestration and context assembly | Ports such as `AIService`, `ConversationStore`, and `ReminderScheduler` |
 | `domain` | Message, conversation, and reminder data models | Plain Python values |
-| `infrastructure.ai` | DeepSeek HTTP calls and provider errors | `AIService.complete(messages)` |
+| `infrastructure.ai` | DeepSeek-compatible HTTP calls, tool calls, and provider errors | `AIService.complete(messages, tools=...)` |
+| `infrastructure.search` | SerpAPI web search and result normalization | Search adapter used by application tools |
 | `infrastructure.db` | Database schema and reads/writes | `ConversationStore` implementation |
 | `infrastructure.reminders` | Due-time storage and delivery scheduling | `ReminderScheduler` implementation |
 
@@ -127,11 +128,16 @@ Dev2 and Dev3 is still an action for the team meeting; this repository cannot in
 3. `AIService` sends that context to DeepSeek and returns assistant text.
 4. `ProcessMessage` stores the user message and assistant reply through `ConversationStore` when
     persistence is configured.
-5. The application asks `ReminderScheduler` to create or update a reminder when the assistant has identified a reminder command. Reminder creation should be explicit and confirmed, not inferred from every casual mention of a date.
+5. The application exposes a model-selected `create_reminder` tool. The tool validates the
+    reminder text, future ISO timestamp, authenticated user/chat identity, and configured
+    timezone before creating it. Reminder creation should be explicit and confirmed, not inferred
+    from every casual mention of a date.
 6. Telegram sends the resulting `OutgoingMessage` back to the chat.
 
-The first implementation covers steps 1 through 4 and 6. Reminder scheduling remains a planned
-port, not hidden global state.
+The assistant covers steps 1 through 6. It may now ask the model to
+use a bounded `web_search` tool for current information when SerpAPI is configured. Search results
+are returned as untrusted tool content and the final answer should include source URLs. Reminder
+creation is available from normal text and voice messages; delivery remains scheduled in-process.
 
 ## Reminder delivery flow
 

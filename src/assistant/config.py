@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_max_tokens: int = 512
+    serpapi_api_key: str = ""
+    search_max_results: int = 5
+    search_timeout_seconds: float = 15.0
+    max_tool_rounds: int = 2
     openai_api_key: str = ""
     openai_base_url: str = "https://openrouter.ai/api/v1"
     openai_transcription_model: str = "openai/gpt-4o-mini-transcribe"

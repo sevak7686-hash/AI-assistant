@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from assistant.domain.messages import ChatMessage
+from assistant.domain.messages import ChatMessage, ToolCall
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService, DeepSeekError
 
 
@@ -110,3 +110,48 @@ async def test_http_status_error_is_wrapped(monkeypatch) -> None:
 
     with pytest.raises(DeepSeekError, match="HTTP 503: upstream unavailable"):
         await service.complete([])
+
+
+async def test_complete_serializes_tool_call_and_result_messages(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Final answer"}}]}
+
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            del url, headers
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda timeout: FakeClient())
+    service = DeepSeekAIService(api_key="key", base_url="https://example.test", model="model")
+    messages = [
+        ChatMessage(
+            role="assistant",
+            content="",
+            tool_calls=(ToolCall(id="call-1", name="web_search", arguments='{"query":"x"}'),),
+        ),
+        ChatMessage(role="tool", content="results", tool_call_id="call-1"),
+    ]
+
+    await service.complete(messages, tools=[{"type": "function"}])
+
+    assert captured["json"]["messages"] == [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "web_search", "arguments": '{"query":"x"}'},
+                }
+            ],
+        },
+        {"role": "tool", "content": "results", "tool_call_id": "call-1"},
+    ]
