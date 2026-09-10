@@ -38,7 +38,10 @@ Create a one-time reminder with a normal text or voice message, for example
 `Remind me tomorrow at 22:00 to take the medicine`. The model asks for the missing time or text
 when necessary and creates the reminder only after both are clear. The bot stores reminders in
 PostgreSQL and checks for due reminders every minute. Times use `REMINDER_TIMEZONE` (default
-`Europe/Moscow`), not the Docker server's timezone. Reminder commands are not required.
+`Europe/Moscow`), not the Docker server's timezone. The current local date and time are provided
+to the model, so relative phrases such as "tomorrow" are resolved from the current date. You can
+also ask by text or voice to list, edit, or remove pending reminders; identify a reminder by its
+number or unique text. Reminder commands are not required.
 
 ## Local Postgres and database layer
 

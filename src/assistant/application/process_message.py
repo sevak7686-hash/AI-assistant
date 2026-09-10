@@ -94,9 +94,17 @@ class ProcessMessage:
             result = await self._ai_service.complete(context)
             return _completion_text(result), []
 
+        available_tools = (_WEB_SEARCH_TOOL,)
+        if self._reminder_store is not None:
+            available_tools += (
+                _CREATE_REMINDER_TOOL,
+                _LIST_REMINDERS_TOOL,
+                _UPDATE_REMINDER_TOOL,
+                _DELETE_REMINDER_TOOL,
+            )
         tools = tuple(
             tool
-            for tool in (_WEB_SEARCH_TOOL, _CREATE_REMINDER_TOOL)
+            for tool in available_tools
             if tool["function"]["name"] != "web_search" or self._search_service is not None
         )
         working = list(context)
@@ -123,6 +131,16 @@ class ProcessMessage:
                         raise RuntimeError("Reminders are not configured")
                     result_content = await self._create_reminder(
                         tool_call.arguments, user_id=user_id, chat_id=chat_id
+                    )
+                elif tool_call.name == "list_reminders":
+                    result_content = await self._list_reminders(user_id=user_id)
+                elif tool_call.name == "update_reminder":
+                    result_content = await self._update_reminder(
+                        tool_call.arguments, user_id=user_id
+                    )
+                elif tool_call.name == "delete_reminder":
+                    result_content = await self._delete_reminder(
+                        tool_call.arguments, user_id=user_id
                     )
                 else:
                     raise RuntimeError(f"Unsupported tool: {tool_call.name}")
@@ -173,10 +191,8 @@ class ProcessMessage:
             return json.dumps(
                 {"error": "Reminder due_at must be an ISO timestamp."}, ensure_ascii=False
             )
-        if due_at.tzinfo is None:
-            due_at = due_at.replace(tzinfo=self._reminder_timezone)
-        due_at = due_at.astimezone(self._reminder_timezone)
-        if due_at <= datetime.now(self._reminder_timezone):
+        due_at = self._normalize_future_time(due_at)
+        if due_at is None:
             return json.dumps(
                 {"error": "Reminder due_at must be in the future."}, ensure_ascii=False
             )
@@ -192,6 +208,71 @@ class ProcessMessage:
             },
             ensure_ascii=False,
         )
+
+    async def _list_reminders(self, *, user_id: int) -> str:
+        reminders = await self._reminder_store.list_pending(user_id=user_id)
+        return json.dumps(
+            [
+                {
+                    "id": reminder.id,
+                    "text": reminder.text,
+                    "due_at": reminder.due_at.astimezone(self._reminder_timezone).isoformat(),
+                }
+                for reminder in reminders
+            ],
+            ensure_ascii=False,
+        )
+
+    async def _update_reminder(self, arguments: str, *, user_id: int) -> str:
+        try:
+            parsed = json.loads(arguments)
+            reminder_id = parsed["id"]
+            text = parsed["text"]
+            due_at_value = parsed["due_at"]
+            due_at = datetime.fromisoformat(due_at_value)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return json.dumps({"error": "Update needs id, text, and due_at."}, ensure_ascii=False)
+        if not isinstance(reminder_id, int) or not isinstance(text, str) or not text.strip():
+            return json.dumps({"error": "Reminder id and text are invalid."}, ensure_ascii=False)
+        due_at = self._normalize_future_time(due_at)
+        if due_at is None:
+            return json.dumps(
+                {"error": "Reminder due_at must be in the future."}, ensure_ascii=False
+            )
+        reminder = await self._reminder_store.update_pending(
+            user_id=user_id, reminder_id=reminder_id, text=text.strip(), due_at=due_at
+        )
+        if reminder is None:
+            return json.dumps(
+                {"updated": False, "error": "Reminder not found."}, ensure_ascii=False
+            )
+        return json.dumps(
+            {
+                "updated": True,
+                "id": reminder.id,
+                "text": reminder.text,
+                "due_at": reminder.due_at.isoformat(),
+            },
+            ensure_ascii=False,
+        )
+
+    async def _delete_reminder(self, arguments: str, *, user_id: int) -> str:
+        try:
+            reminder_id = json.loads(arguments)["id"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return json.dumps({"error": "Delete needs a reminder id."}, ensure_ascii=False)
+        if not isinstance(reminder_id, int):
+            return json.dumps({"error": "Reminder id is invalid."}, ensure_ascii=False)
+        deleted = await self._reminder_store.delete_pending(
+            user_id=user_id, reminder_id=reminder_id
+        )
+        return json.dumps({"deleted": deleted, "id": reminder_id}, ensure_ascii=False)
+
+    def _normalize_future_time(self, value: datetime) -> datetime | None:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=self._reminder_timezone)
+        value = value.astimezone(self._reminder_timezone)
+        return value if value > datetime.now(self._reminder_timezone) else None
 
 
 def _as_completion(result: AICompletion | str) -> AICompletion:
@@ -236,6 +317,47 @@ _CREATE_REMINDER_TOOL: ToolDefinition = {
                 },
             },
             "required": ["text", "due_at"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_LIST_REMINDERS_TOOL: ToolDefinition = {
+    "type": "function",
+    "function": {
+        "name": "list_reminders",
+        "description": "List the user's pending reminders.",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+}
+
+_UPDATE_REMINDER_TOOL: ToolDefinition = {
+    "type": "function",
+    "function": {
+        "name": "update_reminder",
+        "description": "Edit a pending reminder by id, text, and future ISO timestamp.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "text": {"type": "string"},
+                "due_at": {"type": "string", "description": "Future ISO 8601 timestamp."},
+            },
+            "required": ["id", "text", "due_at"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_DELETE_REMINDER_TOOL: ToolDefinition = {
+    "type": "function",
+    "function": {
+        "name": "delete_reminder",
+        "description": "Delete a pending reminder by id.",
+        "parameters": {
+            "type": "object",
+            "properties": {"id": {"type": "integer"}},
+            "required": ["id"],
             "additionalProperties": False,
         },
     },

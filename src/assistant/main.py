@@ -52,13 +52,14 @@ def main() -> None:
     session_factory = create_session_factory(settings.database_url)
     conversation_store = SqlAlchemyConversationStore(session_factory)
     reminder_store = SqlAlchemyReminderStore(session_factory)
+    reminder_timezone = settings.reminder_timezone_info()
     process_message = ProcessMessage(
         ai_service=ai_service,
-        context_builder=ContextBuilder(),
+        context_builder=ContextBuilder(timezone=reminder_timezone),
         conversation_store=conversation_store,
         search_service=search_service,
         reminder_store=reminder_store,
-        reminder_timezone=settings.reminder_timezone_info(),
+        reminder_timezone=reminder_timezone,
         max_tool_rounds=settings.max_tool_rounds,
     )
 
@@ -75,7 +76,7 @@ def main() -> None:
         close_ai_service,
         transcription_service,
         reminder_store,
-        settings.reminder_timezone_info(),
+        reminder_timezone,
     )
     application.run_polling()
 

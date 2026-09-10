@@ -16,6 +16,10 @@ SYSTEM_PROMPT = """You are a personal AI assistant for one user.
     the reminder text and a future ISO 8601 timestamp with the configured timezone.
     Ask one concise clarification when either the text or time is missing or ambiguous.
 - do not claim that a reminder was created unless the tool returns created=true.
+- Use list_reminders when the user asks what reminders are pending.
+- Use update_reminder or delete_reminder only when the user identifies an existing reminder
+    clearly, preferably by its id or unique text. Confirm the operation only after the tool
+    reports success.
 
 ## Boundaries
 - Do not invent facts, actions, tool results, dates, or personal data.
