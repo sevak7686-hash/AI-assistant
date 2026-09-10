@@ -20,6 +20,8 @@ async def test_serpapi_normalizes_results() -> None:
         async def get(self, url, *, params):
             assert url == "https://serpapi.com/search.json"
             assert params["q"] == "latest news"
+            assert params["hl"] == "ru"
+            assert params["gl"] == "ru"
             return FakeResponse()
 
         async def aclose(self) -> None:

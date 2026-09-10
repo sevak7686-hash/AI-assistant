@@ -47,6 +47,8 @@ class SerpAPIWebSearch:
                     "q": query,
                     "api_key": self._api_key,
                     "num": self._max_results,
+                    "hl": "ru",
+                    "gl": "ru",
                 },
             )
             response.raise_for_status()
