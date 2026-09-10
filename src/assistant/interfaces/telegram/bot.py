@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.constants import ChatType
@@ -32,6 +33,7 @@ def build_telegram_app(
     post_shutdown: Callable[[Application], Awaitable[None]] | None = None,
     transcription_service: TranscriptionService | None = None,
     reminder_store: SqlAlchemyReminderStore | None = None,
+    reminder_timezone: ZoneInfo | None = None,
 ) -> Application:
     builder = Application.builder().token(settings.telegram_bot_token)
     if post_shutdown is not None:
@@ -43,6 +45,7 @@ def build_telegram_app(
         allowed_user_ids=allowed,
         transcription_service=transcription_service,
         reminder_store=reminder_store,
+        reminder_timezone=reminder_timezone,
     )
     application.add_handler(CommandHandler("start", handlers.start))
     application.add_handler(CommandHandler("remind", handlers.remind))
@@ -68,11 +71,13 @@ class TelegramHandlers:
         allowed_user_ids: frozenset[int],
         transcription_service: TranscriptionService | None = None,
         reminder_store: SqlAlchemyReminderStore | None = None,
+        reminder_timezone: ZoneInfo | None = None,
     ) -> None:
         self._process_message = process_message
         self._allowed_user_ids = allowed_user_ids
         self._transcription_service = transcription_service
         self._reminder_store = reminder_store
+        self._reminder_timezone = reminder_timezone or ZoneInfo("Europe/Moscow")
 
     def _is_allowed(self, user_id: int) -> bool:
         if not self._allowed_user_ids:
@@ -102,15 +107,7 @@ class TelegramHandlers:
         except ValueError:
             await self._reply_error(update, "Time must use 24-hour format, for example 22:00.")
             return
-        now = datetime.now().astimezone()
-        due_at = now.replace(
-            hour=reminder_time.hour,
-            minute=reminder_time.minute,
-            second=0,
-            microsecond=0,
-        )
-        if due_at <= now:
-            due_at += timedelta(days=1)
+        due_at = _next_due_at(reminder_time, self._reminder_timezone)
         assert update.effective_user is not None
         assert update.effective_chat is not None
         reminder = await self._reminder_store.create(
@@ -167,15 +164,7 @@ class TelegramHandlers:
         except ValueError:
             await self._reply_error(update, "Time must use 24-hour format, for example 22:00.")
             return
-        now = datetime.now().astimezone()
-        due_at = now.replace(
-            hour=reminder_time.hour,
-            minute=reminder_time.minute,
-            second=0,
-            microsecond=0,
-        )
-        if due_at <= now:
-            due_at += timedelta(days=1)
+        due_at = _next_due_at(reminder_time, self._reminder_timezone)
         assert update.effective_user is not None
         reminder = await self._reminder_store.update_pending(
             user_id=update.effective_user.id,
@@ -299,3 +288,13 @@ class TelegramHandlers:
 
 def _base64(data: bytes) -> str:
     return b64encode(data).decode("ascii")
+
+
+def _next_due_at(
+    reminder_time: time, timezone: ZoneInfo, *, now: datetime | None = None
+) -> datetime:
+    current_time = (now or datetime.now(timezone)).astimezone(timezone)
+    due_at = datetime.combine(current_time.date(), reminder_time, tzinfo=timezone)
+    if due_at <= current_time:
+        due_at += timedelta(days=1)
+    return due_at

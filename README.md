@@ -28,8 +28,9 @@ defaults for another OpenAI-compatible provider.
 
 Create a one-time reminder with the 24-hour `/remind HH:MM text` command, for example
 `/remind 22:00 take the medicine`. The bot stores it in PostgreSQL and checks for due reminders
-every minute. Times use the bot server's local timezone; a time that has already passed is scheduled
-for the next day. Use `/reminders` to view pending reminders, `/edit_reminder ID HH:MM new text` to
+every minute. Times use `REMINDER_TIMEZONE` (default `Europe/Moscow`), not the Docker server's
+timezone. A time that has already passed is scheduled for the next day. Use `/reminders` to view
+pending reminders, `/edit_reminder ID HH:MM new text` to
 change one, and `/remove_reminder ID` to delete one.
 
 ## Local Postgres and database layer

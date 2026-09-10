@@ -1,4 +1,5 @@
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://openrouter.ai/api/v1"
     openai_transcription_model: str = "openai/gpt-4o-mini-transcribe"
     transcription_language: str = "ru"
+    reminder_timezone: str = "Europe/Moscow"
     database_url: str = (
         "postgresql+asyncpg://assistant:assistant_dev_password@localhost:5433/assistant"
     )
@@ -36,4 +38,12 @@ class Settings(BaseSettings):
         except ValueError as exc:
             raise ValueError(
                 "ALLOWED_TELEGRAM_USER_IDS must contain only comma-separated integers"
+            ) from exc
+
+    def reminder_timezone_info(self) -> ZoneInfo:
+        try:
+            return ZoneInfo(self.reminder_timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(
+                f"REMINDER_TIMEZONE must be a valid IANA timezone, got {self.reminder_timezone!r}"
             ) from exc

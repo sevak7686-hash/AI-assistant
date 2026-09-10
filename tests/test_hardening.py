@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, time
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from telegram.constants import ChatType
@@ -8,7 +9,7 @@ from assistant.config import Settings
 from assistant.domain.messages import OutgoingMessage
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService, DeepSeekError
 from assistant.infrastructure.db.models import Reminder
-from assistant.interfaces.telegram.bot import TelegramHandlers, _split_message
+from assistant.interfaces.telegram.bot import TelegramHandlers, _next_due_at, _split_message
 
 
 class FakeProcessMessage:
@@ -88,6 +89,22 @@ def test_malformed_allow_list_has_clear_error() -> None:
 
     with pytest.raises(ValueError, match="comma-separated integers"):
         settings.allowed_user_ids()
+
+
+def test_reminder_timezone_defaults_to_moscow() -> None:
+    settings = Settings(telegram_bot_token="token", deepseek_api_key="key")
+
+    assert settings.reminder_timezone_info() == ZoneInfo("Europe/Moscow")
+
+
+def test_reminder_time_is_calculated_in_configured_timezone() -> None:
+    due_at = _next_due_at(
+        time(22, 0),
+        ZoneInfo("Europe/Moscow"),
+        now=datetime(2026, 9, 10, 17, 0, tzinfo=ZoneInfo("UTC")),
+    )
+
+    assert due_at.isoformat() == "2026-09-10T22:00:00+03:00"
 
 
 async def test_group_messages_are_rejected() -> None:

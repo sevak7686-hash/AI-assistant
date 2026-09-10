@@ -54,7 +54,12 @@ def main() -> None:
             await transcription_service.aclose()
 
     application = build_telegram_app(
-        settings, process_message, close_ai_service, transcription_service, reminder_store
+        settings,
+        process_message,
+        close_ai_service,
+        transcription_service,
+        reminder_store,
+        settings.reminder_timezone_info(),
     )
     application.run_polling()
 
