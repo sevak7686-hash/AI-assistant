@@ -9,7 +9,12 @@ from assistant.config import Settings
 from assistant.domain.messages import OutgoingMessage
 from assistant.infrastructure.ai.deepseek import DeepSeekAIService, DeepSeekError
 from assistant.infrastructure.db.models import Reminder
-from assistant.interfaces.telegram.bot import TelegramHandlers, _next_due_at, _split_message
+from assistant.interfaces.telegram.bot import (
+    TelegramHandlers,
+    _next_due_at,
+    _split_message,
+    build_telegram_app,
+)
 
 
 class FakeProcessMessage:
@@ -95,6 +100,18 @@ def test_reminder_timezone_defaults_to_moscow() -> None:
     settings = Settings(telegram_bot_token="token", deepseek_api_key="key")
 
     assert settings.reminder_timezone_info() == ZoneInfo("Europe/Moscow")
+
+
+def test_telegram_application_registers_error_handler() -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        deepseek_api_key="key",
+        allowed_telegram_user_ids="42",
+    )
+
+    application = build_telegram_app(settings, FakeProcessMessage())
+
+    assert len(application.error_handlers) == 1
 
 
 def test_reminder_time_is_calculated_in_configured_timezone() -> None:

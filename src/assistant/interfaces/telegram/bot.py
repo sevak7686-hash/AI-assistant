@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.constants import ChatType
+from telegram.error import NetworkError
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram.request import HTTPXRequest
 
@@ -22,6 +23,18 @@ logger = logging.getLogger(__name__)
 _MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 _MEDIA_DOWNLOAD_ATTEMPTS = 3
 _MEDIA_DOWNLOAD_RETRY_SECONDS = 1
+
+
+async def _handle_telegram_error(update: Update | None, context: ContextTypes.DEFAULT_TYPE) -> None:
+    del update
+    error = context.error
+    if isinstance(error, NetworkError):
+        logger.warning("Telegram network error; polling will retry: %s", error)
+        return
+    logger.error(
+        "Unhandled Telegram error",
+        exc_info=(type(error), error, error.__traceback__) if error is not None else None,
+    )
 
 
 def _split_message(text: str) -> list[str]:
@@ -49,6 +62,7 @@ def build_telegram_app(
     if post_shutdown is not None:
         builder = builder.post_shutdown(post_shutdown)
     application = builder.build()
+    application.add_error_handler(_handle_telegram_error)
     allowed = settings.allowed_user_ids()
     handlers = TelegramHandlers(
         process_message=process_message,
