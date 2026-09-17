@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_max_tokens: int = 512
+    telegram_proxy_url: str = ""
     serpapi_api_key: str = ""
     search_max_results: int = 5
     search_timeout_seconds: float = 35.0

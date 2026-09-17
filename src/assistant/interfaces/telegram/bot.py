@@ -57,6 +57,7 @@ def build_telegram_app(
         read_timeout=60,
         write_timeout=60,
         pool_timeout=30,
+        proxy=settings.telegram_proxy_url or None,
     )
     builder = Application.builder().token(settings.telegram_bot_token).request(telegram_request)
     if post_shutdown is not None:

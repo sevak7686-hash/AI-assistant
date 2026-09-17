@@ -94,6 +94,21 @@ an async SQLAlchemy session factory, and `session_scope` provides one transactio
 operation: successful operations commit, while exceptions roll back and are re-raised. The
 conversation store creates a missing `User` record before appending a `Message`.
 
+## External PostgreSQL and Telegram proxy
+
+For deployment with PostgreSQL on a separate server, set `DATABASE_URL` in `.env` to that server
+and start only the bot:
+
+```powershell
+docker compose up -d bot
+```
+
+The `db` service is limited to the `local` profile, so it is not started by that command. The bot
+runs migrations against the configured `DATABASE_URL`. If Telegram must be reached through a
+SOCKS5 proxy, set `TELEGRAM_PROXY_URL`, for example
+`socks5://proxy-host:1080`. That proxy is used by the Telegram client only; PostgreSQL continues
+to use `DATABASE_URL` directly.
+
 Database schema and session tests use isolated SQLite databases or fakes, so they do not require
 Docker. Run them with:
 
