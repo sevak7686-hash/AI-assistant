@@ -2,9 +2,14 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def sync_database_url(url: str) -> str:
-    sync_url = url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1).replace(
-        "sqlite+aiosqlite", "sqlite", 1
-    )
+    if url.startswith("postgresql://"):
+        sync_url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgres://"):
+        sync_url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    else:
+        sync_url = url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1).replace(
+            "sqlite+aiosqlite", "sqlite", 1
+        )
     if "postgresql+psycopg2" in sync_url:
         parts = urlsplit(sync_url)
         query = dict(parse_qsl(parts.query))

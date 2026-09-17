@@ -62,6 +62,15 @@ def test_sync_database_url_uses_system_ca_for_verified_postgres_tls() -> None:
         "sslrootcert": "system",
     }
 
+    plain_url = "postgresql://user:pass@db.example/assistant?sslmode=verify-full"
+    plain_normalized = sync_database_url(plain_url)
+
+    assert urlsplit(plain_normalized).scheme == "postgresql+psycopg2"
+    assert dict(parse_qsl(urlsplit(plain_normalized).query)) == {
+        "sslmode": "verify-full",
+        "sslrootcert": "system",
+    }
+
 
 def test_conversation_message_schema_supports_recent_memory_lookup() -> None:
     engine = create_engine("sqlite://")
