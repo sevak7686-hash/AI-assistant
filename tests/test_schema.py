@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+from urllib.parse import parse_qsl, urlsplit
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -7,6 +8,7 @@ from sqlalchemy import create_engine, inspect
 
 from assistant.infrastructure.db.base import Base
 from assistant.infrastructure.db.models import ConversationMessage
+from assistant.infrastructure.db.urls import sync_database_url
 
 
 def _load_users_migration():
@@ -43,6 +45,22 @@ def _load_tool_messages_migration():
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     return migration
+
+
+def test_sync_database_url_uses_system_ca_for_verified_postgres_tls() -> None:
+    url = (
+        "postgresql+asyncpg://user:pass@db.example/assistant?"
+        "ssl=verify-full&channel_binding=require"
+    )
+
+    normalized = sync_database_url(url)
+
+    assert urlsplit(normalized).scheme == "postgresql+psycopg2"
+    assert dict(parse_qsl(urlsplit(normalized).query)) == {
+        "sslmode": "verify-full",
+        "channel_binding": "require",
+        "sslrootcert": "system",
+    }
 
 
 def test_conversation_message_schema_supports_recent_memory_lookup() -> None:
