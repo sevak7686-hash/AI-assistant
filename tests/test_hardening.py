@@ -102,6 +102,23 @@ def test_reminder_timezone_defaults_to_moscow() -> None:
     assert settings.reminder_timezone_info() == ZoneInfo("Europe/Moscow")
 
 
+def test_telegram_proxy_url_is_normalized_and_validated() -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        deepseek_api_key="key",
+        telegram_proxy_url="  socks5://proxy-host:1080  ",
+    )
+
+    assert settings.telegram_proxy_url == "socks5://proxy-host:1080"
+
+    with pytest.raises(ValueError, match="TELEGRAM_PROXY_URL"):
+        Settings(
+            telegram_bot_token="token",
+            deepseek_api_key="key",
+            telegram_proxy_url="proxy-host:1080",
+        )
+
+
 def test_telegram_application_registers_error_handler() -> None:
     settings = Settings(
         telegram_bot_token="token",

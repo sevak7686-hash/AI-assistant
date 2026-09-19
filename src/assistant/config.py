@@ -1,7 +1,8 @@
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +34,24 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://assistant:assistant_dev_password@localhost:5433/assistant"
     )
     allowed_telegram_user_ids: str = Field(default="")
+
+    @field_validator("telegram_proxy_url")
+    @classmethod
+    def normalize_telegram_proxy_url(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            return ""
+
+        parsed = urlparse(cleaned)
+        if parsed.scheme not in {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}:
+            raise ValueError(
+                "TELEGRAM_PROXY_URL must be a valid proxy URL like 'socks5://proxy-host:1080'"
+            )
+        if not parsed.hostname:
+            raise ValueError(
+                "TELEGRAM_PROXY_URL must include a hostname, for example 'socks5://proxy-host:1080'"
+            )
+        return cleaned
 
     def allowed_user_ids(self) -> frozenset[int]:
         raw = self.allowed_telegram_user_ids.strip()
