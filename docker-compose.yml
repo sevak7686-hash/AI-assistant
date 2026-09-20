@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # TELEGRAM_PROXY_URL is read by the bot and is used only for Telegram traffic.
+    # TELEGRAM_PROXY_URL configures Telegram API requests and polling only; it is never used for AI or database traffic.
     command: >-
       sh -c "python -m alembic upgrade head && python -m assistant.main"
 

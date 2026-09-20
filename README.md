@@ -26,13 +26,9 @@ language hint is Russian. Set `OPENAI_API_KEY` only when transcription should us
 `OPENAI_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, and `TRANSCRIPTION_LANGUAGE` can override the
 defaults for another OpenAI-compatible provider.
 
-The assistant can search the internet automatically when the model needs current or externally
-verifiable information. Configure `SERPAPI_API_KEY` to enable this capability. `SEARCH_MAX_RESULTS`
-limits returned results (1-10), `SEARCH_TIMEOUT_SECONDS` controls the SerpAPI request timeout, and
-`MAX_TOOL_ROUNDS` limits repeated model search calls. Search results are treated as untrusted
-external reference material, and the final response should include useful source URLs. No search
-command is required. Without a SerpAPI key, normal assistant responses continue to work but web
-search is unavailable.
+Search and reminder settings (`SERPAPI_API_KEY`, `SEARCH_MAX_RESULTS`, `SEARCH_TIMEOUT_SECONDS`,
+`MAX_TOOL_ROUNDS`, and `REMINDER_TIMEZONE`) are reserved for future features and are currently
+ignored.
 
 Create a one-time reminder with a normal text or voice message, for example
 `Remind me tomorrow at 22:00 to take the medicine`. The model asks for the missing time or text
@@ -105,9 +101,10 @@ docker compose up -d bot
 
 The `db` service is limited to the `local` profile, so it is not started by that command. The bot
 runs migrations against the configured `DATABASE_URL`. If Telegram must be reached through a
-SOCKS5 proxy, set `TELEGRAM_PROXY_URL`, for example
-`socks5://proxy-host:1080`. That proxy is used by the Telegram client only; PostgreSQL continues
-to use `DATABASE_URL` directly.
+proxy, set `TELEGRAM_PROXY_URL`, for example `socks5://proxy-host:1080`. It is applied to Telegram
+API requests, file downloads, and polling only; PostgreSQL and AI clients continue to use their
+own direct connections. For `verify-full` PostgreSQL TLS, mount the provider CA certificate into
+the container and set `sslrootcert=` in `DATABASE_URL` to its container path.
 
 Database schema and session tests use isolated SQLite databases or fakes, so they do not require
 Docker. Run them with:

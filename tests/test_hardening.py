@@ -131,6 +131,20 @@ def test_telegram_application_registers_error_handler() -> None:
     assert len(application.error_handlers) == 1
 
 
+@pytest.mark.parametrize("proxy_url", ["", "socks5://user:pass@host:1080"])
+def test_telegram_application_builds_with_or_without_proxy(proxy_url: str) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        deepseek_api_key="key",
+        telegram_proxy_url=proxy_url,
+        allowed_telegram_user_ids="42",
+    )
+
+    application = build_telegram_app(settings, FakeProcessMessage())
+
+    assert application is not None
+
+
 def test_reminder_time_is_calculated_in_configured_timezone() -> None:
     due_at = _next_due_at(
         time(22, 0),

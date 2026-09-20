@@ -11,7 +11,6 @@ from telegram import Update
 from telegram.constants import ChatType
 from telegram.error import NetworkError
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-from telegram.request import HTTPXRequest
 
 from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
@@ -52,14 +51,11 @@ def build_telegram_app(
     reminder_store: SqlAlchemyReminderStore | None = None,
     reminder_timezone: ZoneInfo | None = None,
 ) -> Application:
-    telegram_request = HTTPXRequest(
-        connect_timeout=30,
-        read_timeout=60,
-        write_timeout=60,
-        pool_timeout=30,
-        proxy=settings.telegram_proxy_url or None,
-    )
-    builder = Application.builder().token(settings.telegram_bot_token).request(telegram_request)
+    builder = Application.builder().token(settings.telegram_bot_token)
+    if settings.telegram_proxy_url:
+        builder = builder.proxy(settings.telegram_proxy_url).get_updates_proxy(
+            settings.telegram_proxy_url
+        )
     if post_shutdown is not None:
         builder = builder.post_shutdown(post_shutdown)
     application = builder.build()
