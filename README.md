@@ -27,8 +27,8 @@ language hint is Russian. Set `OPENAI_API_KEY` only when transcription should us
 defaults for another OpenAI-compatible provider.
 
 Search and reminder settings (`SERPAPI_API_KEY`, `SEARCH_MAX_RESULTS`, `SEARCH_TIMEOUT_SECONDS`,
-`MAX_TOOL_ROUNDS`, and `REMINDER_TIMEZONE`) are reserved for future features and are currently
-ignored.
+`MAX_TOOL_ROUNDS`, and `REMINDER_TIMEZONE`) configure the currently available search and reminder
+features.
 
 Create a one-time reminder with a normal text or voice message, for example
 `Remind me tomorrow at 22:00 to take the medicine`. The model asks for the missing time or text
@@ -101,10 +101,23 @@ docker compose up -d bot
 
 The `db` service is limited to the `local` profile, so it is not started by that command. The bot
 runs migrations against the configured `DATABASE_URL`. If Telegram must be reached through a
-proxy, set `TELEGRAM_PROXY_URL`, for example `socks5://proxy-host:1080`. It is applied to Telegram
-API requests, file downloads, and polling only; PostgreSQL and AI clients continue to use their
-own direct connections. For `verify-full` PostgreSQL TLS, mount the provider CA certificate into
-the container and set `sslrootcert=` in `DATABASE_URL` to its container path.
+proxy, set `TELEGRAM_PROXY_URL`, for example `socks5://proxy-host:1080`. Use `socks5://` only for
+a real SOCKS proxy. An HTTP proxy such as Squid normally uses `http://user:pass@host:3128`; port
+3128 is commonly HTTP, so a SOCKS handshake failure with that port usually means the URL scheme is
+wrong. The setting is applied to Telegram API requests, file downloads, and polling only;
+PostgreSQL and AI clients continue to use their own direct connections.
+
+For `verify-full` or `verify-ca` PostgreSQL TLS, mount the provider CA certificate into the bot
+container, for example by adding this read-only volume under the `bot` service:
+
+```yaml
+volumes:
+	- ./provider-ca.pem:/etc/ssl/certs/provider-ca.pem:ro
+```
+
+Set `sslrootcert=/etc/ssl/certs/provider-ca.pem` in `DATABASE_URL`; the path must be the path inside
+the container. The async application URL may use `sslmode` and `sslrootcert`; startup translates
+those options for asyncpg, while Alembic preserves them for psycopg2.
 
 Database schema and session tests use isolated SQLite databases or fakes, so they do not require
 Docker. Run them with:

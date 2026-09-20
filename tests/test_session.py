@@ -1,3 +1,4 @@
+import ssl
 from urllib.parse import parse_qsl, urlsplit
 
 import pytest
@@ -47,12 +48,23 @@ def test_async_database_config_translates_require_ssl() -> None:
     assert ssl_context.verify_mode.value == 0
 
 
-def test_async_database_config_uses_default_context_for_verified_ssl() -> None:
+def test_async_database_config_uses_default_context_for_verified_ssl(monkeypatch) -> None:
+    original_create_default_context = ssl.create_default_context
+    captured: dict[str, str | None] = {}
+
+    def create_default_context(*, cafile=None):
+        captured["cafile"] = cafile
+        return original_create_default_context()
+
+    monkeypatch.setattr(
+        "assistant.infrastructure.db.session.ssl.create_default_context", create_default_context
+    )
     normalized, connect_args = _async_database_config(
-        "postgresql://user:pass@localhost/db?sslmode=verify-full"
+        "postgresql://user:pass@localhost/db?sslmode=verify-full&sslrootcert=/tmp/provider-ca.pem"
     )
 
     assert normalized == "postgresql+asyncpg://user:pass@localhost/db"
+    assert captured["cafile"] == "/tmp/provider-ca.pem"
     ssl_context = connect_args["ssl"]
     assert ssl_context.check_hostname is True
     assert ssl_context.verify_mode.value == 2
