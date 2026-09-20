@@ -119,6 +119,32 @@ def test_telegram_proxy_url_is_normalized_and_validated() -> None:
         )
 
 
+def test_ai_proxy_url_is_normalized_and_validated() -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        deepseek_api_key="key",
+        ai_proxy_url="  http://user:pass@proxy.test:3128  ",
+    )
+
+    assert settings.ai_proxy_url == "http://user:pass@proxy.test:3128"
+    assert (
+        Settings(
+            telegram_bot_token="token",
+            deepseek_api_key="key",
+            ai_proxy_url="   ",
+        ).ai_proxy_url
+        == ""
+    )
+
+    for proxy_url in ("host:3128", "socks5://host:1080"):
+        with pytest.raises(ValueError, match="AI_PROXY_URL"):
+            Settings(
+                telegram_bot_token="token",
+                deepseek_api_key="key",
+                ai_proxy_url=proxy_url,
+            )
+
+
 def test_telegram_application_registers_error_handler() -> None:
     settings = Settings(
         telegram_bot_token="token",

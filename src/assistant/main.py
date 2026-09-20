@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from assistant.application.context_builder import ContextBuilder
 from assistant.application.process_message import ProcessMessage
 from assistant.config import Settings
@@ -14,6 +16,12 @@ from assistant.infrastructure.search.serpapi import SerpAPIWebSearch
 from assistant.interfaces.telegram.bot import build_telegram_app
 
 
+def _build_http_client(proxy_url: str, timeout: float) -> httpx.AsyncClient | None:
+    if not proxy_url:
+        return None
+    return httpx.AsyncClient(timeout=timeout, proxy=proxy_url)
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -24,11 +32,13 @@ def main() -> None:
     if not settings.allowed_user_ids():
         raise RuntimeError("ALLOWED_TELEGRAM_USER_IDS must contain at least one Telegram user ID")
 
+    ai_client = _build_http_client(settings.ai_proxy_url, timeout=60.0)
     ai_service = DeepSeekAIService(
         api_key=settings.deepseek_api_key,
         base_url=settings.deepseek_base_url,
         model=settings.deepseek_model,
         max_tokens=settings.deepseek_max_tokens,
+        client=ai_client,
     )
     search_service = (
         SerpAPIWebSearch(
@@ -39,12 +49,14 @@ def main() -> None:
         if settings.serpapi_api_key
         else None
     )
+    transcription_client = _build_http_client(settings.ai_proxy_url, timeout=120.0)
     transcription_service = (
         OpenAITranscriptionService(
             api_key=settings.openai_api_key or settings.deepseek_api_key,
             base_url=settings.openai_base_url,
             model=settings.openai_transcription_model,
             language=settings.transcription_language,
+            client=transcription_client,
         )
         if settings.openai_api_key or settings.deepseek_api_key
         else None
@@ -69,6 +81,10 @@ def main() -> None:
             await search_service.aclose()
         if transcription_service is not None:
             await transcription_service.aclose()
+        if ai_client is not None:
+            await ai_client.aclose()
+        if transcription_client is not None:
+            await transcription_client.aclose()
 
     application = build_telegram_app(
         settings,

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     deepseek_max_tokens: int = 512
     telegram_proxy_url: str = ""
+    ai_proxy_url: str = ""
     serpapi_api_key: str = ""
     search_max_results: int = 5
     search_timeout_seconds: float = 35.0
@@ -50,6 +51,22 @@ class Settings(BaseSettings):
         if not parsed.hostname:
             raise ValueError(
                 "TELEGRAM_PROXY_URL must include a hostname, for example 'socks5://proxy-host:1080'"
+            )
+        return cleaned
+
+    @field_validator("ai_proxy_url")
+    @classmethod
+    def normalize_ai_proxy_url(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            return ""
+
+        parsed = urlparse(cleaned)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("AI_PROXY_URL must use an http:// or https:// scheme")
+        if not parsed.hostname:
+            raise ValueError(
+                "AI_PROXY_URL must include a hostname, for example 'http://proxy-host:3128'"
             )
         return cleaned
 

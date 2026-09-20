@@ -107,6 +107,10 @@ a real SOCKS proxy. An HTTP proxy such as Squid normally uses `http://user:pass@
 wrong. The setting is applied to Telegram API requests, file downloads, and polling only;
 PostgreSQL and AI clients continue to use their own direct connections.
 
+If direct access to OpenRouter is blocked, set `AI_PROXY_URL` to an `http://` or `https://` proxy.
+It applies only to DeepSeek-compatible chat completions and audio transcription requests; Telegram,
+PostgreSQL, and SerpAPI traffic continue to use their existing connections.
+
 For `verify-full` or `verify-ca` PostgreSQL TLS, mount the provider CA certificate into the bot
 container, for example by adding this read-only volume under the `bot` service:
 
